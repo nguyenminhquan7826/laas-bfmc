@@ -1,0 +1,16 @@
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv-ai/
+venv/
+
+# Runtime outputs
+pi_raw.jpg
+*.avi
+*.mp4
+
+# IDE
+.vscode/
+.idea/

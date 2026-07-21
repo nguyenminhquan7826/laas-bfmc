@@ -1,0 +1,191 @@
+#pragma once
+
+#include <opencv2/opencv.hpp>
+#include <vector>
+#include <limits>
+
+#include "../../laas_core/Messages.hpp"
+
+namespace laas {
+
+class LaneChangePlanner
+{
+public:
+    LaneChangePlanner();
+
+    void reset();
+
+    std::vector<cv::Point> update(
+        const std::vector<cv::Point>& base_centerline,
+        const cv::Vec3f& left_coeff,
+        const cv::Vec3f& right_coeff,
+        bool has_left_lane,
+        bool has_right_lane,
+        float lane_width_px,
+        LaneLineType left_type,
+        LaneLineType right_type,
+        float obstacle_distance,
+        int img_width,
+        int img_height
+    );
+
+    PlannerState getState() const { return state_; }
+    ChangeDirection getLastDirection() const { return last_direction_; }
+
+    float getLastMinDistance() const { return last_min_distance_m_; }
+    float getLastMinTTC() const { return last_min_ttc_s_; }
+    float getLastCost() const { return last_cost_; }
+    float getMeterPerPixel() const { return meter_per_pixel_; }
+    bool hasCollisionFreeSolution() const { return last_solution_collision_free_; }
+    bool isLaneChangeCommitted() const {
+        return state_ == PlannerState::CHANGE_USING_DASHED && hold_counter_ > 0;
+    }
+
+    void setLaneWidthMeters(float lane_width_m);
+    void setVehicleSize(float width_m, float length_m);
+    void setObstacleSize(float width_m, float length_m);
+    void setSafeMargin(float safe_margin_m);
+    void setSpeed(float vx_mps);
+    void setTriggerDistance(float trigger_distance_m);
+    void setLaneChangeCommitFrames(int frames);
+    void setMaxCurvature(float max_curvature_per_m);
+
+private:
+    struct ReferencePoint
+    {
+        cv::Point2f pos_px;
+        float s_m;
+        cv::Point2f n_right;
+    };
+
+    struct StaticObstacle
+    {
+        float s_m;
+        float d_m;
+        float width_m;
+        float length_m;
+        bool valid;
+    };
+
+    struct Candidate
+    {
+        int target_lane;                    // -1: left, 0: keep, +1: right
+        float maneuver_time_s;
+        float lane_change_distance_m;
+        float target_offset_m;
+
+        bool feasible;
+        bool collision;
+        int settle_counter_;
+        int settle_frames_;
+        float min_distance_m;
+        float min_ttc_s;
+        float max_curvature;
+        float max_jerk;
+        float cost;
+
+        std::vector<cv::Point> polyline_px;
+
+        Candidate()
+            : target_lane(0),
+              maneuver_time_s(0.0f),
+              lane_change_distance_m(0.0f),
+              target_offset_m(0.0f),
+              feasible(false),
+              collision(false),
+              settle_counter_(0),
+              settle_frames_(0),
+              min_distance_m(std::numeric_limits<float>::infinity()),
+              min_ttc_s(std::numeric_limits<float>::infinity()),
+              max_curvature(0.0f),
+              max_jerk(0.0f),
+              cost(std::numeric_limits<float>::infinity()) {}
+    };
+
+private:
+    PlannerState state_;
+    ChangeDirection last_direction_;
+
+    int hold_counter_;
+    int hold_frames_;
+
+    float trigger_distance_;
+
+    float lane_width_m_;
+    float vehicle_width_m_;
+    float vehicle_length_m_;
+    float obstacle_width_m_;
+    float obstacle_length_m_;
+    float safe_margin_m_;
+    float vx_mps_;
+    float max_curvature_per_m_;
+    int settle_counter_;
+    int settle_frames_;
+    float meter_per_pixel_;
+
+    float last_min_distance_m_;
+    float last_min_ttc_s_;
+    float last_cost_;
+    bool last_solution_collision_free_;
+
+    int last_img_width_;
+    int last_img_height_;
+
+private:
+    void updateScaleFromLaneWidth(float lane_width_px);
+
+    std::vector<ReferencePoint> buildReferencePath(
+        const std::vector<cv::Point>& base_centerline
+    ) const;
+
+    StaticObstacle buildStaticObstacle(float obstacle_distance_m) const;
+
+    bool canChangeLeft(float distance, bool has_left_lane, LaneLineType left_type) const;
+    bool canChangeRight(float distance, bool has_right_lane, LaneLineType right_type) const;
+
+    std::vector<Candidate> generateCandidates(
+        const std::vector<ReferencePoint>& ref,
+        bool allow_left,
+        bool allow_right
+    ) const;
+
+    Candidate makeKeepLaneCandidate(
+        const std::vector<ReferencePoint>& ref
+    ) const;
+
+    Candidate makeLaneChangeCandidate(
+        const std::vector<ReferencePoint>& ref,
+        int target_lane,
+        float maneuver_time_s
+    ) const;
+
+    void evaluateCandidate(
+        Candidate& candidate,
+        const StaticObstacle& obstacle
+    ) const;
+
+    Candidate selectBestCandidate(
+        const std::vector<Candidate>& candidates
+    ) const;
+
+    void updatePlannerState(const Candidate& best);
+
+    std::vector<cv::Point> offsetReferenceToPolyline(
+        const std::vector<ReferencePoint>& ref,
+        const Candidate& c
+    ) const;
+
+    float lateralOffsetAtS(float s_m, const Candidate& c) const;
+    float lateralDsAtS(float s_m, const Candidate& c) const;
+    float lateralDssAtS(float s_m, const Candidate& c) const;
+    float lateralD3dt3AtS(float s_m, const Candidate& c) const;
+
+    static float quinticBlend(float sigma);
+    static float quinticBlendD1(float sigma);
+    static float quinticBlendD2(float sigma);
+    static float quinticBlendD3(float sigma);
+
+    static float sqr(float x) { return x * x; }
+};
+
+}  // namespace laas

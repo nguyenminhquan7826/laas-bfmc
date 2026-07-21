@@ -1,0 +1,60 @@
+camera:
+  device: "/dev/video0"
+  width: 640
+  height: 480
+  fps: 30
+  bev_forward_range_m: 2.0
+
+uart:
+  port: "/dev/ttyACM0"
+  baudrate: 115200
+
+udp:
+  pc_ip: "192.168.1.104"
+  yolo_send_port: 9996
+  debug_send_port: 9997
+  distance_recv_port: 8888
+
+vehicle:
+  wheelbase_m: 0.2515
+  desired_speed_mps: 0.15
+  steering_limit_deg: 25.0
+  servo_center: 94.5
+  servo_min: 60
+  servo_max: 130
+
+planner:
+  lane_width_m: 0.40
+  vehicle_width_m: 0.21
+  vehicle_length_m: 0.432
+  obstacle_width_m: 0.20
+  obstacle_length_m: 0.22
+  safe_margin_m: 0.10
+  emergency_stop_distance_m: 0.50
+  trigger_distance_m: 1.80
+  lane_change_commit_time_s: 8.0
+
+mpc:
+  horizon: 10
+  q_lateral: 1000.0
+  q_yaw: 50.0
+  r_steering: 5.0
+
+runtime:
+  obstacle_timeout_ms: 500
+  lane_timeout_ms: 300
+  frame_timeout_ms: 200
+  behavior_timeout_ms: 200
+  trajectory_timeout_ms: 200
+  control_command_timeout_ms: 100
+  control_mode: pure_pursuit        # pure_pursuit | mpc
+  camera_period_ms: 33
+  yolo_period_ms: 33
+  perception_period_ms: 33
+  decision_period_ms: 50
+  planning_period_ms: 50
+  control_period_ms: 20
+  logging_period_ms: 100
+  enable_keyboard: true
+  enable_yolo_udp: true
+  enable_uart: true

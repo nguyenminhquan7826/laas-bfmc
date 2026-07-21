@@ -49,6 +49,7 @@ struct VehicleConfig {
     int servo_max = 130;
 };
 
+
 struct PlannerConfig {
     float lane_width_m = 0.40f;
     float vehicle_width_m = 0.21f;

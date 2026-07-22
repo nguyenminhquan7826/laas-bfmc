@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(LAAS_USE_LIBSERIAL "Enable real UART through LibSerial" OFF)
-option(LAAS_BUILD_MPC "Build the optional MPC executable" OFF)
+option(LAAS_USE_LIBSERIAL "Enable real UART through LibSerial" ON)
+option(LAAS_BUILD_MPC "Build the optional MPC executable" ON)
 
 find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)

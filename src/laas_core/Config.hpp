@@ -25,7 +25,7 @@ struct UdpConfig {
     std::string local_ai_ip = "127.0.0.1";
 
     // Change this to the current IPv4 address of the monitoring laptop.
-    std::string monitor_ip = "192.168.1.104";
+    std::string monitor_ip = "192.168.1.253";
 
     // C++ camera -> local Python ONNX process.
     int yolo_send_port = 9996;

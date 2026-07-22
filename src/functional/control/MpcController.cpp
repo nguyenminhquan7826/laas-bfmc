@@ -228,7 +228,7 @@ float MpcController::solveQP(const Eigen::VectorXd& x0,
     }
 
     const Eigen::MatrixXd g = hessian_;
-    const Eigen::VectorXd gradient = Eigen::VectorXd::Zero(z_dim);
+    Eigen::VectorXd gradient = Eigen::VectorXd::Zero(z_dim);
 
     Eigen::MatrixXd equality = Eigen::MatrixXd::Zero((horizon_ + 1) * state_dim, z_dim);
     equality.block(0, 0,
@@ -251,8 +251,8 @@ float MpcController::solveQP(const Eigen::VectorXd& x0,
     const Eigen::SparseMatrix<double> hessian_sparse = g.sparseView();
     const Eigen::SparseMatrix<double> equality_sparse = equality.sparseView();
 
-    const Eigen::VectorXd lower_bound = equality_rhs;
-    const Eigen::VectorXd upper_bound = equality_rhs;
+    Eigen::VectorXd lower_bound = equality_rhs;
+    Eigen::VectorXd upper_bound = equality_rhs;
 
     if (!solver_initialized_ ||
         previous_z_dim_ != z_dim ||

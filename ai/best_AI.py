@@ -42,7 +42,7 @@ class Settings:
     raw_frame_port: int = 9996
     distance_ip: str = "127.0.0.1"
     distance_port: int = 8888
-    monitor_ip: str = "192.168.1.114"
+    monitor_ip: str = "192.168.1.253"
     monitor_port: int = 9998
     monitor_fps: float = 10.0
     monitor_jpeg_quality: int = 75

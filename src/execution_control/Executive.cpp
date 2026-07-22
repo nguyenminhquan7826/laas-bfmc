@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <algorithm>
 
 #include "../laas_core/Time.hpp"
 
@@ -279,7 +280,38 @@ void Executive::perceptionTick()
     if (lane_perception_.process(frame, lane)) {
         blackboard_.setLane(lane);
         if (config_.runtime.enable_yolo_udp && !lane.bird_eye_view.empty()) {
-            yolo_.sendDebugFrame(lane.bird_eye_view, 80);
+            const cv::Mat& bev = lane.bird_eye_view;
+
+            const float safe_range =
+                std::max(config_.camera.bev_forward_range_m, 0.20f);
+
+            int valid_width = static_cast<int>(std::lround(
+                static_cast<float>(bev.rows) *
+                std::max(config_.planner.lane_width_m, 0.05f) /
+                safe_range
+            ));
+
+            valid_width = std::min(
+                std::max(valid_width, 40),
+                static_cast<int>(0.8f * bev.cols)
+            );
+
+            const int x0 = (bev.cols - valid_width) / 2;
+
+            cv::Mat cropped_bev =
+                bev(cv::Rect(x0, 0, valid_width, bev.rows)).clone();
+
+            cv::Mat debug_bev;
+            cv::resize(
+                cropped_bev,
+                debug_bev,
+                bev.size(),
+                0.0,
+                0.0,
+                cv::INTER_LINEAR
+            );
+
+            yolo_.sendDebugFrame(debug_bev, 80);
         }
     }
 }

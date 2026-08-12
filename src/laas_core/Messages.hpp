@@ -85,4 +85,47 @@ struct ControlCmdMsg {
     int servo_cmd = 0;
 };
 
+struct EncoderTelemetry {
+    bool valid = false;
+
+    std::uint32_t sequence = 0;
+    std::uint32_t timestamp_ms = 0;  // Thời gian bên STM32
+
+    std::int32_t total_ticks = 0;
+    std::int16_t delta_ticks = 0;
+    float speed_mps = 0.0F;
+};
+
+struct ImuTelemetry {
+    bool valid = false;
+
+    std::uint32_t sequence = 0;
+    std::uint32_t timestamp_ms = 0;  // Thời gian bên STM32
+
+    float linear_accel_x_mps2 = 0.0F;
+    float linear_accel_y_mps2 = 0.0F;
+    float gyro_z_dps = 0.0F;
+    float yaw_deg = 0.0F;
+
+    std::uint8_t calibration_raw = 0;
+};
+
+struct VehicleTelemetryMsg {
+    Header header;  // timestamp_ms là thời điểm Raspberry Pi nhận frame
+
+    std::uint8_t protocol_version = 0;
+    std::uint32_t packet_sequence = 0;
+    std::uint32_t stm32_tx_timestamp_ms = 0;
+
+    EncoderTelemetry encoder;
+
+    std::int16_t steering_command_deg = 0;
+    std::int16_t pwm_command = 0;
+
+    ImuTelemetry imu;
+
+    std::uint8_t flags = 0;
+    std::uint16_t received_crc16 = 0;
+};
+
 }  // namespace laas

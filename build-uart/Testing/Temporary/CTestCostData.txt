@@ -1,0 +1,2 @@
+telemetry_protocol_test 1 0.0035079
+---

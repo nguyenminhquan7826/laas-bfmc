@@ -128,10 +128,24 @@ CMakeFiles/laas_pp.dir/src/logical_robot/UartVehicleInterface.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/laas_pp.dir/src/logical_robot/UartVehicleInterface.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/UartVehicleInterface.cpp -o CMakeFiles/laas_pp.dir/src/logical_robot/UartVehicleInterface.cpp.s
 
+CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o: CMakeFiles/laas_pp.dir/flags.make
+CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/TelemetryProtocol.cpp
+CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o -MF CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o.d -o CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/TelemetryProtocol.cpp
+
+CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/TelemetryProtocol.cpp > CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.i
+
+CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/TelemetryProtocol.cpp -o CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.s
+
 CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/perception/LaneDetectorCore.cpp
 CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o -MF CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o.d -o CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/perception/LaneDetectorCore.cpp
 
 CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.i: cmake_force
@@ -145,7 +159,7 @@ CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.s: cmake_f
 CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/perception/LanePerceptionModule.cpp
 CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o -MF CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o.d -o CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/perception/LanePerceptionModule.cpp
 
 CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.i: cmake_force
@@ -159,7 +173,7 @@ CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.s: cma
 CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/decision/MissionSupervisor.cpp
 CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o -MF CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o.d -o CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/decision/MissionSupervisor.cpp
 
 CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.i: cmake_force
@@ -173,7 +187,7 @@ CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.s: cmake_force
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/planning/LaneChangePlanner.cpp
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o -MF CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o.d -o CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/planning/LaneChangePlanner.cpp
 
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.i: cmake_force
@@ -187,7 +201,7 @@ CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlanner.cpp.s: cmake_fo
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/planning/LaneChangePlannerModule.cpp
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o -MF CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o.d -o CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/planning/LaneChangePlannerModule.cpp
 
 CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.i: cmake_force
@@ -201,7 +215,7 @@ CMakeFiles/laas_pp.dir/src/functional/planning/LaneChangePlannerModule.cpp.s: cm
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/control/PurePursuitController.cpp
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o -MF CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o.d -o CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/control/PurePursuitController.cpp
 
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.i: cmake_force
@@ -215,7 +229,7 @@ CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitController.cpp.s: cmake
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/control/PurePursuitControlModule.cpp
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o -MF CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o.d -o CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/control/PurePursuitControlModule.cpp
 
 CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.i: cmake_force
@@ -229,7 +243,7 @@ CMakeFiles/laas_pp.dir/src/functional/control/PurePursuitControlModule.cpp.s: cm
 CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/safety/SafetyFilterModule.cpp
 CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o -MF CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o.d -o CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/safety/SafetyFilterModule.cpp
 
 CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.i: cmake_force
@@ -243,7 +257,7 @@ CMakeFiles/laas_pp.dir/src/functional/safety/SafetyFilterModule.cpp.s: cmake_for
 CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/execution_control/Scheduler.cpp
 CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o -MF CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o.d -o CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/execution_control/Scheduler.cpp
 
 CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.i: cmake_force
@@ -257,7 +271,7 @@ CMakeFiles/laas_pp.dir/src/execution_control/Scheduler.cpp.s: cmake_force
 CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o: CMakeFiles/laas_pp.dir/flags.make
 CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o: /home/pi/Documents/laas_v0.6.0-p0-batch/src/execution_control/Executive.cpp
 CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o: CMakeFiles/laas_pp.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o -MF CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o.d -o CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.o -c /home/pi/Documents/laas_v0.6.0-p0-batch/src/execution_control/Executive.cpp
 
 CMakeFiles/laas_pp.dir/src/execution_control/Executive.cpp.i: cmake_force
@@ -274,6 +288,7 @@ laas_pp_OBJECTS = \
 "CMakeFiles/laas_pp.dir/src/logical_robot/CameraInterface.cpp.o" \
 "CMakeFiles/laas_pp.dir/src/logical_robot/UdpYoloInterface.cpp.o" \
 "CMakeFiles/laas_pp.dir/src/logical_robot/UartVehicleInterface.cpp.o" \
+"CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o" \
 "CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o" \
 "CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o" \
 "CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o" \
@@ -292,6 +307,7 @@ laas_pp: CMakeFiles/laas_pp.dir/src/app/main.cpp.o
 laas_pp: CMakeFiles/laas_pp.dir/src/logical_robot/CameraInterface.cpp.o
 laas_pp: CMakeFiles/laas_pp.dir/src/logical_robot/UdpYoloInterface.cpp.o
 laas_pp: CMakeFiles/laas_pp.dir/src/logical_robot/UartVehicleInterface.cpp.o
+laas_pp: CMakeFiles/laas_pp.dir/src/logical_robot/TelemetryProtocol.cpp.o
 laas_pp: CMakeFiles/laas_pp.dir/src/functional/perception/LaneDetectorCore.cpp.o
 laas_pp: CMakeFiles/laas_pp.dir/src/functional/perception/LanePerceptionModule.cpp.o
 laas_pp: CMakeFiles/laas_pp.dir/src/decision/MissionSupervisor.cpp.o
@@ -361,7 +377,7 @@ laas_pp: /usr/lib/aarch64-linux-gnu/libopencv_imgproc.so.4.10.0
 laas_pp: /usr/lib/aarch64-linux-gnu/libopencv_core.so.4.10.0
 laas_pp: /usr/lib/aarch64-linux-gnu/libserial.so
 laas_pp: CMakeFiles/laas_pp.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Linking CXX executable laas_pp"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/pi/Documents/laas_v0.6.0-p0-batch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Linking CXX executable laas_pp"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/laas_pp.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

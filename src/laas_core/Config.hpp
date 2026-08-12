@@ -94,7 +94,7 @@ struct RuntimeConfig {
     bool enable_yolo_udp = true;
 
     // Giữ false trong giai đoạn kiểm thử an toàn
-    bool enable_uart = false;
+    bool enable_uart = true;
 };
 
 struct Config {

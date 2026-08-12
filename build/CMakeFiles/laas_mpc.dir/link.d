@@ -6,6 +6,7 @@ laas_mpc: \
   CMakeFiles/laas_mpc.dir/src/logical_robot/CameraInterface.cpp.o \
   CMakeFiles/laas_mpc.dir/src/logical_robot/UdpYoloInterface.cpp.o \
   CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o \
+  CMakeFiles/laas_mpc.dir/src/logical_robot/TelemetryProtocol.cpp.o \
   CMakeFiles/laas_mpc.dir/src/functional/perception/LaneDetectorCore.cpp.o \
   CMakeFiles/laas_mpc.dir/src/functional/perception/LanePerceptionModule.cpp.o \
   CMakeFiles/laas_mpc.dir/src/decision/MissionSupervisor.cpp.o \
@@ -383,6 +384,8 @@ CMakeFiles/laas_mpc.dir/src/logical_robot/CameraInterface.cpp.o:
 CMakeFiles/laas_mpc.dir/src/logical_robot/UdpYoloInterface.cpp.o:
 
 CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o:
+
+CMakeFiles/laas_mpc.dir/src/logical_robot/TelemetryProtocol.cpp.o:
 
 CMakeFiles/laas_mpc.dir/src/functional/perception/LaneDetectorCore.cpp.o:
 

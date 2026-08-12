@@ -9,7 +9,6 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
-#include <algorithm>
 
 #include "../laas_core/Time.hpp"
 
@@ -155,6 +154,11 @@ void Executive::run()
             handleKeyboardTick();
         }
 
+        if (config_.runtime.enable_keyboard) {
+            handleKeyboardTick();
+            telemetryTick();
+        }
+
         if (scheduler_.camera.ready(now)) {
             scheduler_.camera.mark(now);
             cameraTick();
@@ -280,38 +284,7 @@ void Executive::perceptionTick()
     if (lane_perception_.process(frame, lane)) {
         blackboard_.setLane(lane);
         if (config_.runtime.enable_yolo_udp && !lane.bird_eye_view.empty()) {
-            const cv::Mat& bev = lane.bird_eye_view;
-
-            const float safe_range =
-                std::max(config_.camera.bev_forward_range_m, 0.20f);
-
-            int valid_width = static_cast<int>(std::lround(
-                static_cast<float>(bev.rows) *
-                std::max(config_.planner.lane_width_m, 0.05f) /
-                safe_range
-            ));
-
-            valid_width = std::min(
-                std::max(valid_width, 40),
-                static_cast<int>(0.8f * bev.cols)
-            );
-
-            const int x0 = (bev.cols - valid_width) / 2;
-
-            cv::Mat cropped_bev =
-                bev(cv::Rect(x0, 0, valid_width, bev.rows)).clone();
-
-            cv::Mat debug_bev;
-            cv::resize(
-                cropped_bev,
-                debug_bev,
-                bev.size(),
-                0.0,
-                0.0,
-                cv::INTER_LINEAR
-            );
-
-            yolo_.sendDebugFrame(debug_bev, 80);
+            yolo_.sendDebugFrame(lane.bird_eye_view, 80);
         }
     }
 }
@@ -387,6 +360,60 @@ ControlCmdMsg Executive::computeRawCommand(const TrajectoryMsg& trajectory,
     return raw;
 }
 
+void Executive::telemetryTick()
+{
+    VehicleTelemetryMsg telemetry;
+
+    if (!vehicle_.receiveLatest(telemetry)) {
+        return;
+    }
+
+    const std::uint64_t now = nowMs();
+
+    ++telemetry_received_frames_;
+    ++telemetry_window_frames_;
+
+    if (telemetry_window_start_ms_ == 0U) {
+        telemetry_window_start_ms_ = now;
+    }
+
+    const std::uint64_t window_elapsed_ms =
+        now - telemetry_window_start_ms_;
+
+    if (window_elapsed_ms >= 1000U) {
+        telemetry_rx_hz_ =
+            static_cast<double>(telemetry_window_frames_) *
+            1000.0 /
+            static_cast<double>(window_elapsed_ms);
+
+        telemetry_window_start_ms_ = now;
+        telemetry_window_frames_ = 0U;
+    }
+
+    if (have_telemetry_sequence_) {
+        const std::uint32_t difference =
+            telemetry.packet_sequence -
+            last_telemetry_sequence_;
+
+        if (difference == 0U) {
+            ++telemetry_duplicate_frames_;
+        } else if (difference < 0x80000000U) {
+            telemetry_sequence_gaps_ +=
+                static_cast<std::uint64_t>(difference - 1U);
+        } else {
+            // STM32 reset hoặc sequence quay về giá trị nhỏ.
+            ++telemetry_sequence_resets_;
+        }
+    } else {
+        have_telemetry_sequence_ = true;
+    }
+
+    last_telemetry_sequence_ =
+        telemetry.packet_sequence;
+
+    latest_telemetry_ = telemetry;
+}
+
 void Executive::controlTick()
 {
     const LanePerceptionMsg lane = blackboard_.lane();
@@ -404,25 +431,67 @@ void Executive::controlTick()
 
 void Executive::loggingTick() const
 {
+    const VehicleTelemetryMsg telemetry = latest_telemetry_;
+
+    const std::uint64_t now = nowMs();
+
+    std::uint64_t telemetry_age_ms = 0U;
+
+    if (telemetry.header.valid &&
+        now >= telemetry.header.timestamp_ms) {
+        telemetry_age_ms =
+            now - telemetry.header.timestamp_ms;
+    }
+
+    const char* telemetry_state = "NONE";
+
+    if (telemetry.header.valid) {
+        telemetry_state =
+            telemetry_age_ms <= 200U ? "OK" : "STALE";
+    }
+
+
     const LanePerceptionMsg lane = blackboard_.lane();
     const ObstacleMsg obstacle = blackboard_.obstacle();
     const BehaviorRequest behavior = blackboard_.behavior();
     const TrajectoryMsg trajectory = blackboard_.trajectory();
     const ControlCmdMsg safe = blackboard_.safeCommand();
 
-    std::cout << "[EXEC] "
-              << "mode=" << behaviorToString(behavior.mode)
-              << " planner=" << plannerStateToString(trajectory.planner_state)
-              << " plan=" << ((trajectory.header.valid && trajectory.collision_free) ? "SAFE" : "BLOCKED")
-              << " dir=" << directionToString(trajectory.direction)
-              << " lane=" << (lane.header.valid ? "OK" : "BAD")
-              << " obs=" << obstacle.distance_m
-              << " minD=" << trajectory.min_distance_m
-              << " ttc=" << trajectory.min_ttc_s
-              << " steer=" << safe.steering_deg
-              << " servo=" << safe.servo_cmd
-              << " speed=" << safe.speed_mps
-              << "\n";
+    std::cout   << "[EXEC] "
+                << "mode=" << behaviorToString(behavior.mode)
+                << " planner=" << plannerStateToString(trajectory.planner_state)
+                << " plan=" << ((trajectory.header.valid && trajectory.collision_free) ? "SAFE" : "BLOCKED")
+                << " dir=" << directionToString(trajectory.direction)
+                << " lane=" << (lane.header.valid ? "OK" : "BAD")
+                << " obs=" << obstacle.distance_m
+                << " minD=" << trajectory.min_distance_m
+                << " ttc=" << trajectory.min_ttc_s
+                << " steer=" << safe.steering_deg
+                << " servo=" << safe.servo_cmd
+                << " speed=" << safe.speed_mps
+                << " tel=" << telemetry_state
+                << " ageMs=" << telemetry_age_ms
+                << " rxHz=" << telemetry_rx_hz_
+                << " telSeq=" << telemetry.packet_sequence
+                << " seqGap=" << telemetry_sequence_gaps_
+                << " dup=" << telemetry_duplicate_frames_
+                << " seqReset=" << telemetry_sequence_resets_
+
+                << " encV=" << (telemetry.encoder.valid ? 1 : 0)
+                << " encSeq=" << telemetry.encoder.sequence
+                << " ticks=" << telemetry.encoder.total_ticks
+                << " dTicks=" << telemetry.encoder.delta_ticks
+                << " encSpeed=" << telemetry.encoder.speed_mps
+
+                << " imuV=" << (telemetry.imu.valid ? 1 : 0)
+                << " imuSeq=" << telemetry.imu.sequence
+                << " ax=" << telemetry.imu.linear_accel_x_mps2
+                << " ay=" << telemetry.imu.linear_accel_y_mps2
+                << " gz=" << telemetry.imu.gyro_z_dps
+                << " yaw=" << telemetry.imu.yaw_deg
+                << " calib=" << static_cast<unsigned>(
+                    telemetry.imu.calibration_raw)
+                << "\n";
 }
 
 }  // namespace laas

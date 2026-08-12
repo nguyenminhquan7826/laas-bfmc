@@ -20,6 +20,7 @@ set(LAAS_CORE_SOURCES
     src/logical_robot/CameraInterface.cpp
     src/logical_robot/UdpYoloInterface.cpp
     src/logical_robot/UartVehicleInterface.cpp
+    src/logical_robot/TelemetryProtocol.cpp
     src/functional/perception/LaneDetectorCore.cpp
     src/functional/perception/LanePerceptionModule.cpp
     src/decision/MissionSupervisor.cpp
@@ -69,5 +70,33 @@ if(LAAS_BUILD_MPC)
     target_link_libraries(laas_mpc PRIVATE
         Eigen3::Eigen
         OsqpEigen::OsqpEigen
+    )
+endif()
+
+include(CTest)
+
+if(BUILD_TESTING)
+    add_executable(telemetry_protocol_test
+        tests/TelemetryProtocolTest.cpp
+        src/logical_robot/TelemetryProtocol.cpp
+    )
+
+    configure_laas_target(telemetry_protocol_test)
+
+    set_target_properties(telemetry_protocol_test PROPERTIES
+        CXX_STANDARD 14
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+
+    target_compile_options(telemetry_protocol_test PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+    )
+
+    add_test(
+        NAME telemetry_protocol_test
+        COMMAND telemetry_protocol_test
     )
 endif()

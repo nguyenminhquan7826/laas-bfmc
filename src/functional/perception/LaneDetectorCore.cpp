@@ -13,13 +13,15 @@ LaneDetectorCore::LaneDetectorCore(int width,
     : width(width),
       height(height)
 {
-    const float safe_forward_range = std::max(bev_forward_range_m, 0.20f);
-    expected_lane_width_px_ = static_cast<float>(height) *
-                              std::max(lane_width_m, 0.05f) /
-                              safe_forward_range;
-    expected_lane_width_px_ = std::min(
-        std::max(expected_lane_width_px_, 40.0f),
-        0.8f * static_cast<float>(width));
+    // Legacy LaneDetector processes a 640x480 BEV after cropping the valid
+    // IPM region and stretching it back to the requested output size.  Its
+    // lane-search and centre-line heuristics therefore work in that resized
+    // coordinate system, where the nominal lane width is about 350 px.
+    // Keep the public constructor unchanged, but use the legacy pixel scale.
+    (void)lane_width_m;
+    (void)bev_forward_range_m;
+    expected_lane_width_px_ = 350.0f *
+                              static_cast<float>(width) / 640.0f;
     lane_width_px_ = expected_lane_width_px_;
 }
 
@@ -104,8 +106,8 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
             float x_right = evalX(right_coeffs, height - 1.0f);
             float lane_width = std::fabs(x_right - x_left);
 
-            if (lane_width > 0.55f * expected_lane_width_px_ &&
-                lane_width < 1.60f * expected_lane_width_px_) {
+            // Same acceptance range as the legacy LaneDetector.
+            if (lane_width > 100.0f && lane_width < 600.0f) {
                 initialized = true;
             } else {
                 initialized = false;
@@ -327,8 +329,9 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
             lane_width_candidate = std::fabs(x_right - x_left);
         }
 
-        if (lane_width_candidate > 0.55f * expected_lane_width_px_ &&
-            lane_width_candidate < 1.60f * expected_lane_width_px_)
+        // Same update range as the legacy LaneDetector.
+        if (lane_width_candidate > 80.0f &&
+            lane_width_candidate < 500.0f)
         {
             lane_width_px_ = lane_width_candidate;
         }
@@ -362,8 +365,10 @@ cv::Mat LaneDetectorCore::applyIPM(const cv::Mat& frame)
     // =====================================================
     // DESTINATION POINTS
     // =====================================================
-    const float margin_x =
-        0.5f * (static_cast<float>(width) - expected_lane_width_px_);
+    // Preserve the destination geometry used by the legacy implementation.
+    // Scale the 150 px margin only when an output width other than 640 is used.
+    const float margin_x = 150.0f *
+                           static_cast<float>(width) / 640.0f;
 
     cv::Point2f dst_tl(margin_x, 0.0f);
     cv::Point2f dst_tr(width - margin_x, 0.0f);
@@ -386,8 +391,47 @@ cv::Mat LaneDetectorCore::applyIPM(const cv::Mat& frame)
         cv::Scalar(0, 0, 0)
     );
 
-    // Keep a fixed metric mapping. Content-dependent crop/resize changes the
-    // pixel-to-metre scale every frame and invalidates planning/control.
+    // =====================================================
+    // CROP THE VALID IPM AREA, THEN RESIZE BEFORE LANE DRAWING
+    // =====================================================
+    // The old LaneDetector removed the black warp border here.  Performing
+    // this step inside applyIPM() is important: processMask(), polynomial
+    // fitting and all debug drawing then operate in the final 640x480
+    // coordinate system, so the coloured lines are not enlarged afterwards.
+    // Because the destination quadrilateral is a rectangle, its valid
+    // horizontal limits are known exactly.  A fixed ROI produces the same
+    // black-border removal as the old auto-crop without frame-to-frame scale
+    // jitter when the road happens to be dark.
+    const int pad_x = std::max(
+        1,
+        static_cast<int>(std::lround(5.0 * width / 640.0))
+    );
+    const int crop_left = std::min(
+        std::max(static_cast<int>(std::lround(margin_x)) + pad_x, 0),
+        warped.cols - 1
+    );
+    const int crop_right = std::min(
+        std::max(static_cast<int>(std::lround(width - margin_x)) - pad_x,
+                 crop_left + 1),
+        warped.cols
+    );
+    const int crop_width = crop_right - crop_left;
+
+    if (crop_width > 50 && warped.rows > 50) {
+        const cv::Rect roi(crop_left, 0, crop_width, warped.rows);
+        const cv::Mat cropped = warped(roi);
+        cv::resize(
+            cropped,
+            bird_eye_view,
+            cv::Size(width, height),
+            0.0,
+            0.0,
+            cv::INTER_LINEAR
+        );
+        return bird_eye_view;
+    }
+
+    // Safe fallback if the valid region cannot be determined.
     bird_eye_view = warped.clone();
     return bird_eye_view;
 }

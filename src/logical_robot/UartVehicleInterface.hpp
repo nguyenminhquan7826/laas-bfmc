@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <string>
 
 #include "../laas_core/Config.hpp"
 #include "../laas_core/Messages.hpp"
@@ -15,6 +14,11 @@ public:
 
     bool init();
     bool send(const ControlCmdMsg& command);
+
+    // Lấy frame telemetry mới nhất.
+    // Các frame cũ hơn trong queue sẽ bị loại bỏ.
+    bool receiveLatest(VehicleTelemetryMsg& telemetry);
+
     void close();
     bool isOpened() const;
 

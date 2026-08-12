@@ -1,0 +1,51 @@
+Start testing: Aug 12 15:42 +07
+----------------------------------------------------------
+1/1 Testing: telemetry_protocol_test
+1/1 Test: telemetry_protocol_test
+Command: "/home/pi/Documents/laas_v0.6.0-p0-batch/build-uart/telemetry_protocol_test"
+Directory: /home/pi/Documents/laas_v0.6.0-p0-batch/build-uart
+"telemetry_protocol_test" start time: Aug 12 15:42 +07
+Output:
+----------------------------------------------------------
+[PASS] CRC vector equals 48A4
+[PASS] Valid frame accepted
+[PASS] Valid frame has no error
+[PASS] Header marked valid
+[PASS] Raspberry Pi receive timestamp
+[PASS] Protocol version
+[PASS] Packet sequence
+[PASS] Encoder sequence
+[PASS] Total encoder ticks
+[PASS] Delta encoder ticks
+[PASS] Encoder speed
+[PASS] Steering command
+[PASS] PWM command
+[PASS] IMU sequence
+[PASS] IMU yaw
+[PASS] IMU calibration
+[PASS] Telemetry flags
+[PASS] Encoder valid flag
+[PASS] IMU valid flag
+[PASS] Received CRC
+[PASS] Wrong CRC rejected
+[PASS] Wrong CRC error type
+[PASS] Output unchanged after CRC error
+[PASS] Missing fields rejected
+[PASS] Missing field error type
+[PASS] Unsupported version rejected
+[PASS] Unsupported version error type
+[PASS] NaN rejected
+[PASS] NaN error type
+[PASS] Frame with flags=1 accepted
+[PASS] Encoder flag decoded
+[PASS] IMU invalid flag decoded
+All telemetry protocol tests passed
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"telemetry_protocol_test" end time: Aug 12 15:42 +07
+"telemetry_protocol_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 12 15:42 +07

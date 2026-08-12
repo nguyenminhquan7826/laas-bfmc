@@ -28,6 +28,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/laas_mpc.dir/src/functional/safety/SafetyFilterModule.cpp.o.d"
   "CMakeFiles/laas_mpc.dir/src/logical_robot/CameraInterface.cpp.o"
   "CMakeFiles/laas_mpc.dir/src/logical_robot/CameraInterface.cpp.o.d"
+  "CMakeFiles/laas_mpc.dir/src/logical_robot/TelemetryProtocol.cpp.o"
+  "CMakeFiles/laas_mpc.dir/src/logical_robot/TelemetryProtocol.cpp.o.d"
   "CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o"
   "CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o.d"
   "CMakeFiles/laas_mpc.dir/src/logical_robot/UdpYoloInterface.cpp.o"

@@ -120,8 +120,9 @@ CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o: \
  /usr/include/c++/14/bits/shared_ptr_atomic.h \
  /usr/include/c++/14/bits/atomic_base.h \
  /usr/include/c++/14/bits/atomic_lockfree_defines.h \
- /usr/include/c++/14/backward/auto_ptr.h /usr/include/c++/14/string \
- /usr/include/c++/14/bits/char_traits.h \
+ /usr/include/c++/14/backward/auto_ptr.h \
+ /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/../laas_core/Config.hpp \
+ /usr/include/c++/14/string /usr/include/c++/14/bits/char_traits.h \
  /usr/include/c++/14/bits/localefwd.h \
  /usr/include/aarch64-linux-gnu/c++/14/bits/c++locale.h \
  /usr/include/c++/14/clocale /usr/include/locale.h \
@@ -155,7 +156,6 @@ CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/14/bits/charconv.h \
  /usr/include/c++/14/bits/basic_string.tcc \
- /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/../laas_core/Config.hpp \
  /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/../laas_core/Messages.hpp \
  /usr/include/c++/14/cstdint /usr/include/c++/14/vector \
  /usr/include/c++/14/bits/stl_vector.h \
@@ -356,6 +356,10 @@ CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o: \
  /usr/include/opencv4/opencv2/video.hpp \
  /usr/include/opencv4/opencv2/video/tracking.hpp \
  /usr/include/opencv4/opencv2/video/background_segm.hpp \
+ /home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/TelemetryProtocol.hpp \
+ /usr/include/c++/14/atomic /usr/include/c++/14/thread \
+ /usr/include/c++/14/bits/std_thread.h \
+ /usr/include/c++/14/bits/this_thread_sleep.h \
  /usr/include/libserial/SerialPort.h \
  /usr/include/libserial/SerialPortConstants.h /usr/include/termios.h \
  /usr/include/aarch64-linux-gnu/bits/termios.h \

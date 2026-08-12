@@ -119,8 +119,8 @@ struct VehicleTelemetryMsg {
 
     EncoderTelemetry encoder;
 
-    std::int16_t steering_command_deg = 0;
-    std::int16_t pwm_command = 0;
+    std::int32_t steering_command_deg = 0;
+    std::int32_t pwm_command = 0;
 
     ImuTelemetry imu;
 

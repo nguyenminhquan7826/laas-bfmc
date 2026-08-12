@@ -45,6 +45,7 @@ private:
     void perceptionTick();
     void decisionTick();
     void planningTick();
+    void telemetryTick();
     void controlTick();
     void loggingTick() const;
 
@@ -78,6 +79,20 @@ private:
     // timestamps prevent that same frame from being sent/processed repeatedly.
     uint64_t last_yolo_frame_timestamp_ms_{0};
     uint64_t last_perception_frame_timestamp_ms_{0};
+
+    VehicleTelemetryMsg latest_telemetry_;
+
+    bool have_telemetry_sequence_{false};
+    std::uint32_t last_telemetry_sequence_{0};
+
+    std::uint64_t telemetry_received_frames_{0};
+    std::uint64_t telemetry_sequence_gaps_{0};
+    std::uint64_t telemetry_duplicate_frames_{0};
+    std::uint64_t telemetry_sequence_resets_{0};
+
+    std::uint64_t telemetry_window_start_ms_{0};
+    std::uint64_t telemetry_window_frames_{0};
+    double telemetry_rx_hz_{0.0};
 };
 
 }  // namespace laas

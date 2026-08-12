@@ -22,6 +22,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/planning/LaneChangePlannerModule.cpp" "CMakeFiles/laas_mpc.dir/src/functional/planning/LaneChangePlannerModule.cpp.o" "gcc" "CMakeFiles/laas_mpc.dir/src/functional/planning/LaneChangePlannerModule.cpp.o.d"
   "/home/pi/Documents/laas_v0.6.0-p0-batch/src/functional/safety/SafetyFilterModule.cpp" "CMakeFiles/laas_mpc.dir/src/functional/safety/SafetyFilterModule.cpp.o" "gcc" "CMakeFiles/laas_mpc.dir/src/functional/safety/SafetyFilterModule.cpp.o.d"
   "/home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/CameraInterface.cpp" "CMakeFiles/laas_mpc.dir/src/logical_robot/CameraInterface.cpp.o" "gcc" "CMakeFiles/laas_mpc.dir/src/logical_robot/CameraInterface.cpp.o.d"
+  "/home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/TelemetryProtocol.cpp" "CMakeFiles/laas_mpc.dir/src/logical_robot/TelemetryProtocol.cpp.o" "gcc" "CMakeFiles/laas_mpc.dir/src/logical_robot/TelemetryProtocol.cpp.o.d"
   "/home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/UartVehicleInterface.cpp" "CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o" "gcc" "CMakeFiles/laas_mpc.dir/src/logical_robot/UartVehicleInterface.cpp.o.d"
   "/home/pi/Documents/laas_v0.6.0-p0-batch/src/logical_robot/UdpYoloInterface.cpp" "CMakeFiles/laas_mpc.dir/src/logical_robot/UdpYoloInterface.cpp.o" "gcc" "CMakeFiles/laas_mpc.dir/src/logical_robot/UdpYoloInterface.cpp.o.d"
   "" "laas_mpc" "gcc" "CMakeFiles/laas_mpc.dir/link.d"

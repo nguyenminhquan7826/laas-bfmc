@@ -24,3 +24,6 @@ pi_raw.jpg
 
 # Local Python virtual environments
 /.venv*/
+
+# Local Python virtual environments
+/.venv*/

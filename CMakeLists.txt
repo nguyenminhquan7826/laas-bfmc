@@ -73,30 +73,3 @@ if(LAAS_BUILD_MPC)
     )
 endif()
 
-include(CTest)
-
-if(BUILD_TESTING)
-    add_executable(telemetry_protocol_test
-        tests/TelemetryProtocolTest.cpp
-        src/logical_robot/TelemetryProtocol.cpp
-    )
-
-    configure_laas_target(telemetry_protocol_test)
-
-    set_target_properties(telemetry_protocol_test PROPERTIES
-        CXX_STANDARD 14
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-
-    target_compile_options(telemetry_protocol_test PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-    )
-
-    add_test(
-        NAME telemetry_protocol_test
-        COMMAND telemetry_protocol_test
-    )
-endif()

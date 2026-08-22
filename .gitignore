@@ -14,3 +14,10 @@ pi_raw.jpg
 # IDE
 .vscode/
 .idea/
+
+# Local CMake build directories
+/build/
+/build-*/
+
+# Python virtual environments
+/ai/.venv*/

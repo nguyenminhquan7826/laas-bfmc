@@ -152,10 +152,6 @@ void Executive::run()
 
         if (config_.runtime.enable_keyboard) {
             handleKeyboardTick();
-        }
-
-        if (config_.runtime.enable_keyboard) {
-            handleKeyboardTick();
             telemetryTick();
         }
 

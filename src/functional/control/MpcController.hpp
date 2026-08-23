@@ -1,9 +1,12 @@
 #pragma once
 
+// OpenCV phải đứng trước OsqpEigen/OSQP
+#include <opencv2/opencv.hpp>
+
 #include <Eigen/Dense>
 #include <OsqpEigen/OsqpEigen.h>
+
 #include <memory>
-#include <opencv2/opencv.hpp>
 #include <vector>
 
 namespace laas {

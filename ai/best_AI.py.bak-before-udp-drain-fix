@@ -262,7 +262,7 @@ class YOLOv8ONNX:
         options = ort.SessionOptions()
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        options.intra_op_num_threads = 2
+        options.intra_op_num_threads = 3
         options.inter_op_num_threads = 1
 
         self.settings = settings
@@ -587,34 +587,17 @@ def recv_latest_frame(
             latest_address = address
             break
 
-    # Inference is normally slower than camera capture.
-    # Drain a bounded amount of queued UDP data so this function cannot
-    # spend several seconds following a continuously arriving camera stream.
-    # Drain only packets that are already queued.
-    # Temporarily switch the socket to true non-blocking mode so we never
-    # wait for future camera packets while trying to catch up.
-    previous_timeout = sock.gettimeout()
-    sock.setblocking(False)
-
-    try:
-        drain_deadline = time.monotonic() + 0.010
-
-        for _ in range(512):
-            if time.monotonic() >= drain_deadline:
-                break
-
-            try:
-                packet, address = sock.recvfrom(65535)
-            except BlockingIOError:
-                break
-
-            frame = reassembler.add_packet(packet, address)
-
-            if frame is not None:
-                latest_frame = frame
-                latest_address = address
-    finally:
-        sock.settimeout(previous_timeout)
+    # Inference is normally slower than camera capture. Drain queued packets
+    # and keep the newest complete frame so AI latency does not grow over time.
+    for _ in range(4096):
+        try:
+            packet, address = sock.recvfrom(65535, socket.MSG_DONTWAIT)
+        except BlockingIOError:
+            break
+        frame = reassembler.add_packet(packet, address)
+        if frame is not None:
+            latest_frame = frame
+            latest_address = address
 
     assert latest_frame is not None and latest_address is not None
     return latest_frame, latest_address
@@ -657,13 +640,6 @@ def run(settings: Settings) -> int:
     previous_processed = 0.0
     filtered_fps = 0.0
 
-    # Bench diagnostics only. Does not affect detection/control.
-    stat_start = time.monotonic()
-    stat_last_print = stat_start
-    stat_frames = 0
-    stat_detections = 0
-    stat_tx = 0
-
     print(f"[AI] Model: {settings.model_path}")
     print(f"[AI] Raw frame: {settings.bind_ip}:{settings.raw_frame_port}")
     print(
@@ -699,12 +675,8 @@ def run(settings: Settings) -> int:
                 continue
 
             last_complete_frame = time.monotonic()
-            stat_frames += 1
-
             try:
                 detections = detector.detect(frame)
-                stat_detections += len(detections)
-
                 annotated, distance, _confidence = estimator.process(
                     frame, detections
                 )
@@ -727,21 +699,8 @@ def run(settings: Settings) -> int:
             message = f"{distance:.3f}" if distance is not None else "-1.000"
             try:
                 distance_sock.sendto(message.encode("ascii"), distance_destination)
-                stat_tx += 1
             except OSError as exc:
                 print(f"[AI] Cannot send distance: {exc}")
-
-            if now - stat_last_print >= 2.0:
-                elapsed = max(now - stat_start, 1e-6)
-                print(
-                    f"[AI STAT] frames={stat_frames} "
-                    f"inferHz={stat_frames / elapsed:.2f} "
-                    f"detections={stat_detections} "
-                    f"tx={stat_tx} "
-                    f"last={message} "
-                    f"filteredFps={filtered_fps:.2f}"
-                )
-                stat_last_print = now
 
             cv2.putText(
                 annotated,

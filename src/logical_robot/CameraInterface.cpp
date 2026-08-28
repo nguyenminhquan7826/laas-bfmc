@@ -113,10 +113,18 @@ bool CameraInterface::grab(FrameMsg& output)
         return false;
     }
 
-    if (saved_raw_count_ == 0) {
-        cv::imwrite("pi_raw.jpg", raw);
-        std::cout << "[CAMERA] Saved pi_raw.jpg" << std::endl;
-        saved_raw_count_ = 1;
+    // Camera warm-up:
+    // Không lưu frame đầu tiên vì AE/AWB của libcamera
+    // có thể chưa ổn định. Ở 30 FPS, frame 60 ~ 2 giây.
+    if (saved_raw_count_ < 60) {
+        ++saved_raw_count_;
+
+        if (saved_raw_count_ == 60) {
+            cv::imwrite("pi_raw.jpg", raw);
+            std::cout
+                << "[CAMERA] Saved pi_raw.jpg after warm-up (frame 60)"
+                << std::endl;
+        }
     }
 
     output.frame_bgr = undistortAndResize(raw);

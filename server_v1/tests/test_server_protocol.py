@@ -13,10 +13,12 @@ if str(SERVER_DIR) not in sys.path:
 
 from server_stub import (
     MAP_ID,
+    normalize_source_seq,
     validate_common,
     validate_parking_status,
     validate_plan_request,
     validate_safety_event,
+    validate_serialized_trajectory,
     validate_trajectory_status,
     validate_vehicle_pose,
 )
@@ -125,6 +127,45 @@ class ServerProtocolTests(unittest.TestCase):
     def test_common_rejects_wrong_map(self) -> None:
         msg = {"version": 1, "map_id": "map_v2"}
         self.assertEqual(validate_common(msg), (False, "map_id_mismatch"))
+
+    def test_safety_replan_source_seq_falls_back_to_latest_pose(self) -> None:
+        snap = {
+            "pose_seq": 27,
+            "parking_status": {"seq": 26},
+        }
+        self.assertEqual(normalize_source_seq(None, snap), 27)
+
+    def test_source_seq_prefers_explicit_trigger_sequence(self) -> None:
+        snap = {
+            "pose_seq": 27,
+            "parking_status": {"seq": 26},
+        }
+        self.assertEqual(normalize_source_seq(31, snap), 31)
+
+    def test_source_seq_falls_back_to_parking_sequence(self) -> None:
+        snap = {
+            "pose_seq": None,
+            "parking_status": {"seq": 19},
+        }
+        self.assertEqual(normalize_source_seq(None, snap), 19)
+
+    def test_serialized_trajectory_rejects_null_source_seq_before_send(self) -> None:
+        response = {
+            "type": "trajectory",
+            "version": 1,
+            "source_seq": None,
+            "map_id": MAP_ID,
+            "reference_point": "rear_axle_center",
+            "target_slot": "P_B2",
+            "points": [],
+        }
+
+        # Invalid source_seq is checked before planner geometry is touched, so
+        # a context object is deliberately unnecessary for this regression.
+        self.assertEqual(
+            validate_serialized_trajectory(None, response, {"P_B2": "FREE"}),
+            (False, "trajectory_source_seq_invalid"),
+        )
 
 
 if __name__ == "__main__":

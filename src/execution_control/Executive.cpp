@@ -129,6 +129,29 @@ int getchNonBlocking()
     return ch;
 }
 
+// [SCHEDULER_AUDIT_V1]
+// Cooperative scheduler helper. Each task checks its deadline using a fresh
+// monotonic timestamp. Normal ticks keep start-to-start cadence. If a task
+// itself overruns its period, reset the phase at completion so the next loop
+// cannot issue a catch-up burst immediately after the overrun.
+template <typename Function>
+void runPeriodicTask(PeriodicTimer& timer, Function&& task)
+{
+    const std::uint64_t start_ms = nowMs();
+    if (!timer.ready(start_ms)) {
+        return;
+    }
+
+    timer.mark(start_ms);
+    task();
+
+    const std::uint64_t end_ms = nowMs();
+    if (end_ms >= start_ms &&
+        end_ms - start_ms >= static_cast<std::uint64_t>(timer.periodMs())) {
+        timer.mark(end_ms);
+    }
+}
+
 }  // namespace
 
 Executive::Executive(const Config& config)
@@ -227,63 +250,64 @@ void Executive::run()
 
     running_.store(true);
 
+    // Keyboard is operator I/O, not a 1 kHz control task. Polling at 20 ms
+    // keeps it responsive while avoiding repeated tcgetattr/tcsetattr/fcntl
+    // calls on every 1 ms scheduler spin.
+    constexpr int kKeyboardPollPeriodMs = 20;
+    PeriodicTimer keyboard_timer(kKeyboardPollPeriodMs);
+    keyboard_timer.reset(nowMs());
+
     while (running_.load()) {
-        const uint64_t now = nowMs();
-
         if (config_.runtime.enable_keyboard) {
-            handleKeyboardTick();
+            runPeriodicTask(keyboard_timer, [this]() {
+                handleKeyboardTick();
+            });
+
+            // Q/ESC must not allow another camera/planning/control tick in the
+            // same scheduler iteration. The normal shutdown STOP is sent below.
+            if (!running_.load()) {
+                break;
+            }
         }
 
-        if (config_.runtime.enable_keyboard) {
-            handleKeyboardTick();
-            telemetryTick();
-        }
+        // Telemetry consumption must never depend on keyboard availability.
+        // receiveLatest() is non-blocking and drains the latest UART RX sample.
+        telemetryTick();
 
-        if (scheduler_.camera.ready(now)) {
-            scheduler_.camera.mark(now);
+        runPeriodicTask(scheduler_.camera, [this]() {
             cameraTick();
-        }
+        });
 
-        if (scheduler_.yolo.ready(now)) {
-            scheduler_.yolo.mark(now);
+        runPeriodicTask(scheduler_.yolo, [this]() {
             yoloTick();
-        }
+        });
 
-        if (scheduler_.perception.ready(now)) {
-            scheduler_.perception.mark(now);
+        runPeriodicTask(scheduler_.perception, [this]() {
             perceptionTick();
-        }
+        });
 
-        if (scheduler_.decision.ready(now)) {
-            scheduler_.decision.mark(now);
+        runPeriodicTask(scheduler_.decision, [this]() {
             decisionTick();
-        }
+        });
 
-        if (scheduler_.planning.ready(now)) {
-            scheduler_.planning.mark(now);
+        runPeriodicTask(scheduler_.planning, [this]() {
             planningTick();
-        }
+        });
 
-        if (scheduler_.control.ready(now)) {
-            scheduler_.control.mark(now);
-
+        runPeriodicTask(scheduler_.control, [this]() {
 #ifdef LAAS_ENABLE_PARKING_CLIENT
             // Step-11: service parking TCP/protocol before parking safety.
-            //
-            // This is intentionally independent of OperatingMode::PARKING.
-            // The Server connection must be maintained during bench testing
-            // even while the real vehicle operating mode remains LANE_DRIVING.
+            // This remains independent of OperatingMode::PARKING.
             parkingNetworkTick();
 #endif
 
             controlTick();
             parkingBenchControlTick();
-        }
+        });
 
-        if (scheduler_.logging.ready(now)) {
-            scheduler_.logging.mark(now);
+        runPeriodicTask(scheduler_.logging, [this]() {
             loggingTick();
-        }
+        });
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }

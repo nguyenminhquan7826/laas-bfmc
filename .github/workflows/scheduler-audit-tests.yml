@@ -1,0 +1,59 @@
+name: Scheduler Audit Tests
+
+on:
+  push:
+    branches:
+      - step12-status-sync
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  scheduler-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build scheduler unit test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Isrc \
+            server_v1/tests/test_scheduler.cpp \
+            src/execution_control/Scheduler.cpp \
+            -o /tmp/test_scheduler
+
+      - name: Run scheduler unit test
+        run: /tmp/test_scheduler
+
+      - name: Audit Executive scheduler structure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          text = Path('src/execution_control/Executive.cpp').read_text()
+          start = text.index('void Executive::run()')
+          end = text.index('void Executive::stop()', start)
+          run = text[start:end]
+
+          assert run.count('handleKeyboardTick();') == 1, 'keyboard tick must occur exactly once'
+          assert run.count('telemetryTick();') == 1, 'telemetry tick must occur exactly once'
+          assert 'runPeriodicTask(scheduler_.control' in run
+          assert 'runPeriodicTask(scheduler_.camera' in run
+          assert '[SCHEDULER_AUDIT_V1]' in text
+
+          control_start = run.index('runPeriodicTask(scheduler_.control')
+          control_end = run.index('runPeriodicTask(scheduler_.logging', control_start)
+          control = run[control_start:control_end]
+          assert control.index('parkingNetworkTick();') < control.index('controlTick();') < control.index('parkingBenchControlTick();')
+
+          bench_start = text.index('void Executive::parkingBenchControlTick()')
+          bench_end = text.index('void Executive::controlTick()', bench_start)
+          bench = '\n'.join(
+              line for line in text[bench_start:bench_end].splitlines()
+              if not line.lstrip().startswith('//')
+          )
+          assert 'vehicle_.send' not in bench, 'parking bench must remain NO UART'
+          print('[PASS] Executive scheduler structure and NO PARKING UART')
+          PY

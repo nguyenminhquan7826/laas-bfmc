@@ -2,9 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
-#include <deque>
 #include <memory>
-#include <string>
 
 #include "../laas_core/Blackboard.hpp"
 #include "../laas_core/Config.hpp"
@@ -59,17 +57,6 @@ private:
     void telemetryTick();
     void parkingNetworkTick();
     void parkingBenchControlTick();
-
-    void parkingSafetyEventSyncTick(
-        const ParkingTrajectoryMsg& trajectory);
-
-    void queueParkingSafetyEvent(
-        const std::string& event,
-        std::uint64_t trajectory_id,
-        bool has_trajectory_id);
-
-    void flushParkingSafetyEvents();
-
     void controlTick();
     void loggingTick() const;
 
@@ -78,12 +65,6 @@ private:
                                     const BehaviorRequest& behavior);
 
 private:
-    struct PendingParkingSafetyEvent {
-        std::string event;
-        std::uint64_t trajectory_id{0};
-        bool has_trajectory_id{false};
-    };
-
     Config config_;
     Blackboard blackboard_;
     Scheduler scheduler_;
@@ -142,18 +123,6 @@ private:
     std::uint64_t last_sent_parking_status_sequence_{0};
     bool have_sent_parking_status_sequence_{false};
     std::uint64_t parking_status_tx_sequence_{1};
-
-    // Step-11: transition-based parking safety synchronization.
-    // Events generated during a TCP outage remain queued and are
-    // transmitted after the connection is restored.
-    std::deque<PendingParkingSafetyEvent>
-        parking_safety_event_queue_;
-
-    std::string last_parking_safety_reason_{
-        "NOT_EVALUATED"};
-
-    bool parking_blocking_safety_active_{false};
-
 #ifdef LAAS_ENABLE_PARKING_CLIENT
     bool parking_server_connected_{false};
 #endif

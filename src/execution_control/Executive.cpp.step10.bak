@@ -57,54 +57,6 @@ const char* directionToString(ChangeDirection direction)
     }
 }
 
-// Step-11 mapping from the dedicated Pi parking safety gate
-// to Parking Server V1.
-//
-// Only transitions are transmitted. A persistent fault is not
-// retransmitted at every 20 ms control cycle.
-bool mapParkingSafetyReasonToServerEvent(
-    const std::string& reason,
-    std::string& event,
-    bool& requires_clear)
-{
-    requires_clear = false;
-
-    if (reason == "SERVER_DISCONNECTED") {
-        event = "SERVER_TIMEOUT";
-        requires_clear = true;
-        return true;
-    }
-
-    if (reason == "LOCAL_OBSTACLE_BLOCKING") {
-        event = "CRITICAL_OBSTACLE";
-        requires_clear = true;
-        return true;
-    }
-
-    if (reason == "RAW_COMMAND_INVALID" ||
-        reason == "RAW_COMMAND_STALE" ||
-        reason == "TRACKER_STATE_INVALID" ||
-        reason == "POSE_INVALID" ||
-        reason == "POSE_STALE" ||
-        reason == "TRAJECTORY_INVALID" ||
-        reason == "SPEED_LIMIT_EXCEEDED" ||
-        reason == "STEERING_LIMIT_EXCEEDED" ||
-        reason == "DIRECTION_SPEED_MISMATCH") {
-
-        event = "TRAJECTORY_INVALID";
-        return true;
-    }
-
-    return false;
-}
-
-bool parkingSafetyReasonIsClear(
-    const std::string& reason)
-{
-    return reason == "PASS_BENCH_ONLY" ||
-           reason == "GOAL_HOLD";
-}
-
 int getchNonBlocking()
 {
     termios oldt{};
@@ -262,16 +214,6 @@ void Executive::run()
 
         if (scheduler_.control.ready(now)) {
             scheduler_.control.mark(now);
-
-#ifdef LAAS_ENABLE_PARKING_CLIENT
-            // Step-11: service parking TCP/protocol before parking safety.
-            //
-            // This is intentionally independent of OperatingMode::PARKING.
-            // The Server connection must be maintained during bench testing
-            // even while the real vehicle operating mode remains LANE_DRIVING.
-            parkingNetworkTick();
-#endif
-
             controlTick();
             parkingBenchControlTick();
         }
@@ -516,51 +458,6 @@ void Executive::parkingNetworkTick()
         return;
     }
 
-    // ========================================================
-    // Step-11 BENCH ONLY STATIC POSE
-    //
-    // Used only when:
-    //   - parking bench mode is enabled
-    //   - UART is disabled
-    //   - real pose estimator is disabled
-    //   - an explicit initial pose is configured
-    //
-    // NEVER use this path for real vehicle localization.
-    // ========================================================
-    if (config_.parking.bench_mode &&
-        !config_.runtime.enable_uart &&
-        !config_.parking.enable_pose_estimator &&
-        config_.parking.initial_pose_valid) {
-
-        static std::uint64_t bench_pose_sequence = 1U;
-        static std::uint64_t last_bench_pose_ms = 0U;
-
-        const std::uint64_t now = nowMs();
-        constexpr std::uint64_t kBenchPosePeriodMs = 100U;
-
-        if (last_bench_pose_ms == 0U ||
-            now - last_bench_pose_ms >= kBenchPosePeriodMs) {
-
-            VehiclePoseMsg pose;
-
-            pose.header.valid = true;
-            pose.header.timestamp_ms = now;
-
-            pose.sequence = bench_pose_sequence++;
-
-            pose.map_id = config_.parking.map_id;
-            pose.source = "BENCH_STATIC_INITIAL_POSE";
-
-            pose.x_m = config_.parking.initial_x_m;
-            pose.y_m = config_.parking.initial_y_m;
-            pose.yaw_rad = config_.parking.initial_yaw_rad;
-
-            blackboard_.setVehiclePose(pose);
-
-            last_bench_pose_ms = now;
-        }
-    }
-
     ParkingStatusMsg bench_status;
     if (parking_status_bench_source_.process(nowMs(), bench_status)) {
         blackboard_.setParkingStatus(bench_status);
@@ -568,10 +465,6 @@ void Executive::parkingNetworkTick()
 
     parking_server_.service();
     parking_server_connected_ = parking_server_.connected();
-
-    // A safety event may have been generated while TCP was down.
-    // Flush it immediately after reconnect.
-    flushParkingSafetyEvents();
 
     ParkingServerMessage server_message;
     while (parking_server_.popMessage(server_message)) {
@@ -636,175 +529,6 @@ void Executive::parkingNetworkTick()
 #endif
 }
 
-
-void Executive::queueParkingSafetyEvent(
-    const std::string& event,
-    std::uint64_t trajectory_id,
-    bool has_trajectory_id)
-{
-    constexpr std::size_t kMaxPendingSafetyEvents = 8U;
-
-    if (event.empty()) {
-        return;
-    }
-
-    // Avoid duplicate adjacent events.
-    if (!parking_safety_event_queue_.empty()) {
-        const PendingParkingSafetyEvent& back =
-            parking_safety_event_queue_.back();
-
-        if (back.event == event &&
-            back.trajectory_id == trajectory_id &&
-            back.has_trajectory_id == has_trajectory_id) {
-            return;
-        }
-    }
-
-    if (parking_safety_event_queue_.size() >=
-        kMaxPendingSafetyEvents) {
-
-        std::cerr
-            << "[PARKING][SAFETY] event queue full; "
-            << "drop=" << event << "\n";
-
-        return;
-    }
-
-    PendingParkingSafetyEvent pending;
-
-    pending.event = event;
-    pending.trajectory_id = trajectory_id;
-    pending.has_trajectory_id = has_trajectory_id;
-
-    parking_safety_event_queue_.push_back(pending);
-}
-
-void Executive::flushParkingSafetyEvents()
-{
-#ifdef LAAS_ENABLE_PARKING_CLIENT
-
-    if (!config_.parking.enable ||
-        !parking_server_connected_) {
-        return;
-    }
-
-    while (!parking_safety_event_queue_.empty()) {
-
-        const PendingParkingSafetyEvent& pending =
-            parking_safety_event_queue_.front();
-
-        if (!parking_server_.sendSafetyEvent(
-                pending.trajectory_id,
-                pending.has_trajectory_id,
-                pending.event)) {
-            return;
-        }
-
-        std::cout
-            << "[PARKING][SAFETY_TX] event="
-            << pending.event;
-
-        if (pending.has_trajectory_id) {
-            std::cout
-                << " tid="
-                << pending.trajectory_id;
-        } else {
-            std::cout << " tid=none";
-        }
-
-        std::cout << "\n";
-
-        parking_safety_event_queue_.pop_front();
-    }
-
-#endif
-}
-
-void Executive::parkingSafetyEventSyncTick(
-    const ParkingTrajectoryMsg& trajectory)
-{
-    if (!parking_safety_result_.evaluated) {
-        return;
-    }
-
-    const std::string& reason =
-        parking_safety_result_.reason;
-
-    // Safety events in Step-11 are trajectory/session events.
-    // Do not emit SERVER_TIMEOUT during startup before a valid
-    // parking trajectory exists.
-    const bool has_active_trajectory =
-        trajectory.header.valid &&
-        trajectory.trajectory_id > 0U;
-
-    if (!has_active_trajectory) {
-        last_parking_safety_reason_ = reason;
-        flushParkingSafetyEvents();
-        return;
-    }
-
-    // No state transition: do not spam Server.
-    if (reason == last_parking_safety_reason_) {
-        flushParkingSafetyEvents();
-        return;
-    }
-
-    const std::uint64_t trajectory_id =
-        trajectory.trajectory_id;
-
-    std::string event;
-    bool requires_clear = false;
-
-    if (mapParkingSafetyReasonToServerEvent(
-            reason,
-            event,
-            requires_clear)) {
-
-        queueParkingSafetyEvent(
-            event,
-            trajectory_id,
-            true);
-
-        // SERVER_TIMEOUT and CRITICAL_OBSTACLE pause the
-        // server session and later require SAFETY_CLEARED.
-        //
-        // TRAJECTORY_INVALID already requests replan by itself,
-        // therefore we must NOT automatically send
-        // SAFETY_CLEARED after that event.
-        parking_blocking_safety_active_ =
-            requires_clear;
-
-        std::cout
-            << "[PARKING][SAFETY] reason="
-            << reason
-            << " -> event="
-            << event
-            << (requires_clear
-                    ? " [PAUSE]"
-                    : " [REPLAN]")
-            << "\n";
-    }
-    else if (
-        parkingSafetyReasonIsClear(reason) &&
-        parking_blocking_safety_active_) {
-
-        queueParkingSafetyEvent(
-            "SAFETY_CLEARED",
-            trajectory_id,
-            true);
-
-        parking_blocking_safety_active_ = false;
-
-        std::cout
-            << "[PARKING][SAFETY] clear"
-            << " -> SAFETY_CLEARED [REPLAN]\n";
-    }
-
-    last_parking_safety_reason_ = reason;
-
-    flushParkingSafetyEvents();
-}
-
 void Executive::parkingBenchControlTick()
 {
     parking_bench_raw_command_ = ControlCmdMsg{};
@@ -834,12 +558,7 @@ void Executive::parkingBenchControlTick()
         parking_bench_raw_command_, parking_tracker_debug_, pose, trajectory,
         latest_telemetry_, obstacle, server_connected, &parking_safety_result_);
 
-    // Step-11 sends safety state to the Server only.
-    // Pi local stop authority remains independent of Server response.
-    parkingSafetyEventSyncTick(trajectory);
-
-    // Deliberately no vehicle_.send(...) here.
-    // Parking remains bench-only.
+    // Deliberately no vehicle_.send(...) here. Step-10 is observation/bench only.
 }
 
 void Executive::controlTick()

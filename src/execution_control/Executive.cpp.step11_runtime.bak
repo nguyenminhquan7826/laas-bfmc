@@ -262,16 +262,6 @@ void Executive::run()
 
         if (scheduler_.control.ready(now)) {
             scheduler_.control.mark(now);
-
-#ifdef LAAS_ENABLE_PARKING_CLIENT
-            // Step-11: service parking TCP/protocol before parking safety.
-            //
-            // This is intentionally independent of OperatingMode::PARKING.
-            // The Server connection must be maintained during bench testing
-            // even while the real vehicle operating mode remains LANE_DRIVING.
-            parkingNetworkTick();
-#endif
-
             controlTick();
             parkingBenchControlTick();
         }
@@ -514,51 +504,6 @@ void Executive::parkingNetworkTick()
 #ifdef LAAS_ENABLE_PARKING_CLIENT
     if (!config_.parking.enable) {
         return;
-    }
-
-    // ========================================================
-    // Step-11 BENCH ONLY STATIC POSE
-    //
-    // Used only when:
-    //   - parking bench mode is enabled
-    //   - UART is disabled
-    //   - real pose estimator is disabled
-    //   - an explicit initial pose is configured
-    //
-    // NEVER use this path for real vehicle localization.
-    // ========================================================
-    if (config_.parking.bench_mode &&
-        !config_.runtime.enable_uart &&
-        !config_.parking.enable_pose_estimator &&
-        config_.parking.initial_pose_valid) {
-
-        static std::uint64_t bench_pose_sequence = 1U;
-        static std::uint64_t last_bench_pose_ms = 0U;
-
-        const std::uint64_t now = nowMs();
-        constexpr std::uint64_t kBenchPosePeriodMs = 100U;
-
-        if (last_bench_pose_ms == 0U ||
-            now - last_bench_pose_ms >= kBenchPosePeriodMs) {
-
-            VehiclePoseMsg pose;
-
-            pose.header.valid = true;
-            pose.header.timestamp_ms = now;
-
-            pose.sequence = bench_pose_sequence++;
-
-            pose.map_id = config_.parking.map_id;
-            pose.source = "BENCH_STATIC_INITIAL_POSE";
-
-            pose.x_m = config_.parking.initial_x_m;
-            pose.y_m = config_.parking.initial_y_m;
-            pose.yaw_rad = config_.parking.initial_yaw_rad;
-
-            blackboard_.setVehiclePose(pose);
-
-            last_bench_pose_ms = now;
-        }
     }
 
     ParkingStatusMsg bench_status;

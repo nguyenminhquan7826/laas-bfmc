@@ -62,7 +62,7 @@ jobs:
       - name: Run ParkingServerClient TCP/NDJSON tests
         run: timeout 20s /tmp/test_parking_server_client
 
-  step12-session-sync-policy:
+  step12-policies:
     runs-on: ubuntu-latest
 
     steps:
@@ -79,6 +79,17 @@ jobs:
 
       - name: Run Step 12 session sync policy test
         run: /tmp/test_parking_session_sync_policy
+
+      - name: Build Step 12 trajectory status policy test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Iserver_v1/tests/cpp_stubs \
+            -Isrc \
+            server_v1/tests/test_parking_trajectory_status_policy.cpp \
+            -o /tmp/test_parking_trajectory_status_policy
+
+      - name: Run Step 12 trajectory status policy test
+        run: /tmp/test_parking_trajectory_status_policy
 
   parking-e2e:
     runs-on: ubuntu-latest

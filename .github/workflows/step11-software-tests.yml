@@ -30,5 +30,33 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q .
 
-      - name: Run Step 11 tests
-        run: python -m unittest discover -s tests -v
+      - name: Run Step 11 server tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+  cpp-client-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install C++ test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ pkg-config libjson-c-dev
+
+      - name: Build ParkingServerClient harness
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -include cmath -include cerrno \
+            -Iserver_v1/tests/cpp_stubs \
+            -Isrc \
+            server_v1/tests/test_parking_server_client.cpp \
+            src/logical_robot/ParkingServerClient.cpp \
+            src/logical_robot/ParkingProtocol.cpp \
+            $(pkg-config --cflags --libs json-c) \
+            -pthread \
+            -o /tmp/test_parking_server_client
+
+      - name: Run ParkingServerClient TCP/NDJSON tests
+        run: timeout 20s /tmp/test_parking_server_client

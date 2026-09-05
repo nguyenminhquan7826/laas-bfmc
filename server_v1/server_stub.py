@@ -525,7 +525,7 @@ class Handler(socketserver.StreamRequestHandler):
                 "STALE_INPUT",
                 reason,
                 pose_age_ms=None if post["pose_age_ms"] is None else round(float(post["pose_age_ms"]), 1),
-                parking_age_ms=None if post["parking_age_age_ms"] is None else round(float(post["parking_age_ms"]), 1),
+                parking_age_ms=None if post["parking_age_ms"] is None else round(float(post["parking_age_ms"]), 1),
             )
             print(f"[GUARD] seq={source_seq} reject={reason}_after_planning")
             return

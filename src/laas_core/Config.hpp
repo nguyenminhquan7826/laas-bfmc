@@ -137,7 +137,7 @@ struct RuntimeConfig {
     ControlMode control_mode = ControlMode::MPC;
 
     int camera_period_ms = 33;
-    int yolo_period_ms = 33;
+    int yolo_period_ms = 333;  // ~3.00 FPS sustained AI rate
     int perception_period_ms = 33;
     int decision_period_ms = 50;
     int planning_period_ms = 50;
@@ -147,8 +147,26 @@ struct RuntimeConfig {
     bool enable_keyboard = true;
     bool enable_yolo_udp = true;
 
-    // Giữ false trong giai đoạn kiểm thử an toàn
+    // UART RX/connection enable.
     bool enable_uart = true;
+
+    // Master TX gate.
+    // Giữ false cho đến khi neutral-only build đã được xác nhận.
+    bool enable_uart_tx = false;
+
+    // Bench safety:
+    // Khi true, mọi command thực tế gửi xuống STM32 đều bị ép:
+    //   speed = 0.00 m/s
+    //   servo = servo_center
+    // kể cả MPC/PP hoặc người dùng yêu cầu RUN.
+    bool enable_uart_tx_neutral_only = true;
+
+    // Bench motor-test safety.
+    // Chỉ có tác dụng khi neutral_only được tắt có chủ đích.
+    float uart_tx_test_max_speed_mps = 0.03f;
+
+    // Trong motor bench test đầu tiên, luôn khóa servo ở center.
+    bool uart_tx_force_center = true;
 };
 
 struct Config {

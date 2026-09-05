@@ -69,16 +69,11 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
         left_ok  = (left_points.size()  >= 60);
         right_ok = (right_points.size() >= 60);
 
-        std::cout << "[INIT] left_points=" << left_points.size()
-                  << " right_points=" << right_points.size() << std::endl;
 
         if (left_ok) {
             left_coeffs = fitPoly(left_points, bird_eye_view, true);
             left_type = classifyLaneMarking(mask, left_coeffs);
             // switch (left_type) {
-            //     case LaneLineType::SOLID:  std::cout << "LEFTLINE: SOLID\n"; break;
-            //     case LaneLineType::DASHED: std::cout << "LEFTLINE: DASHED\n"; break;
-            //     default:                   std::cout << "LEFTLINE: UNKNOWN\n"; break;
             // }
 
             // Lưu prev lane trái nếu lane hiện tại detect tốt
@@ -90,9 +85,6 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
             right_coeffs = fitPoly(right_points, bird_eye_view, false);
             right_type = classifyLaneMarking(mask, right_coeffs);
             switch (right_type) {
-                case LaneLineType::SOLID:  std::cout << "RIGHTLINE: SOLID\n"; break;
-                case LaneLineType::DASHED: std::cout << "RIGHTLINE: DASHED\n"; break;
-                default:                   std::cout << "RIGHTLINE: UNKNOWN\n"; break;
             }
 
             // Lưu prev lane phải nếu lane hiện tại detect tốt
@@ -125,16 +117,11 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
         left_ok  = (left_points.size()  >= 60);
         right_ok = (right_points.size() >= 60);
 
-        std::cout << "[TRACK] left_points=" << left_points.size()
-                  << " right_points=" << right_points.size() << std::endl;
 
         if (left_ok) {
             left_coeffs = fitPoly(left_points, bird_eye_view, true);
             left_type = classifyLaneMarking(mask, left_coeffs);
             switch (left_type) {
-                case LaneLineType::SOLID:  std::cout << "LEFTLINE: SOLID\n"; break;
-                case LaneLineType::DASHED: std::cout << "LEFTLINE: DASHED\n"; break;
-                default:                   std::cout << "LEFTLINE: UNKNOWN\n"; break;
             }
         } else if (has_prev_left_) {
             left_coeffs = prev_left_;   // fallback chỉ khi thực sự có prev hợp lệ
@@ -144,9 +131,6 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
             right_coeffs = fitPoly(right_points, bird_eye_view, false);
             right_type = classifyLaneMarking(mask, right_coeffs);
             switch (right_type) {
-                case LaneLineType::SOLID:  std::cout << "RIGHTLINE: SOLID\n"; break;
-                case LaneLineType::DASHED: std::cout << "RIGHTLINE: DASHED\n"; break;
-                default:                   std::cout << "RIGHTLINE: UNKNOWN\n"; break;
             }
         } else if (has_prev_right_) {
             right_coeffs = prev_right_;
@@ -199,10 +183,6 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
 
                 float center = bird_eye_view.cols / 2.0f;
 
-                std::cout << "[MERGE CHECK] AVG_LEFT=" << avg_left
-                        << " AVG_RIGHT=" << avg_right
-                        << " AVG_WIDTH=" << lane_width_avg_for_update
-                        << " CENTER=" << center << std::endl;
 
                 // Nếu 2 lane quá gần nhau => khả năng đang cùng bám 1 lane
                 if (lane_width_avg_for_update < 275.0f) {
@@ -211,23 +191,19 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
                     // nhiều khả năng chỉ còn lane trái thật, lane phải bị bám nhầm
                     if (avg_left < center && avg_right < center) {
                         merging_right_flag = true;
-                        std::cout << "[MERGE] Both lanes on LEFT side -> drop RIGHT lane\n";
                     }
                     // Cả hai đều nằm bên phải tâm ảnh:
                     // nhiều khả năng chỉ còn lane phải thật, lane trái bị bám nhầm
                     else if (avg_left > center && avg_right > center) {
                         merging_left_flag = true;
-                        std::cout << "[MERGE] Both lanes on RIGHT side -> drop LEFT lane\n";
                     }
                     else {
                         // fallback:
                         // lane nào ít điểm hơn thì khả năng là lane bám nhầm
                         if (left_points.size() >= right_points.size()) {
                             merging_right_flag = true;
-                            std::cout << "[MERGE] Fallback -> drop RIGHT lane\n";
                         } else {
                             merging_left_flag = true;
-                            std::cout << "[MERGE] Fallback -> drop LEFT lane\n";
                         }
                     }
                 }
@@ -259,7 +235,6 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
             float slope_left = computeLaneSlope(left_coeffs, static_cast<float>(mid_y));
             if (std::fabs(slope_left) > 5.0f) {
                 error_lane = true;
-                std::cout << "[ERR] slope_left=" << slope_left << std::endl;
             }
         }
 
@@ -267,11 +242,9 @@ void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
             float slope_right = computeLaneSlope(right_coeffs, static_cast<float>(mid_y));
             if (std::fabs(slope_right) > 5.0f) {
                 error_lane = true;
-                std::cout << "[ERR] slope_right=" << slope_right << std::endl;
             }
         }
 
-        // std::cout << "Error lane flag: " << error_lane << std::endl;
 
         if (error_lane) {
             // Reset hoàn toàn state tracking cũ
@@ -390,6 +363,12 @@ cv::Mat LaneDetectorCore::applyIPM(const cv::Mat& frame)
         cv::BORDER_CONSTANT,
         cv::Scalar(0, 0, 0)
     );
+
+    // TEMP A/B TEST:
+    // Giữ nguyên hệ tọa độ 640x480 sau warpPerspective.
+    // Không crop + stretch về 640 trong bài test này.
+    bird_eye_view = warped.clone();
+    return bird_eye_view;
 
     // =====================================================
     // CROP THE VALID IPM AREA, THEN RESIZE BEFORE LANE DRAWING
@@ -658,7 +637,6 @@ std::vector<cv::Point> LaneDetectorCore::computeCenterline(cv::Vec3f coeff_left,
             cv::circle(outImg, {x, y}, 2, {255, 255, 0}, -1);
 	}
     }
-    // std::cout << "Lane Width Average: " << current_laneW << "px" << std::endl;
 
     // ==== Debug hiển thị ==== 
     std::string dbg_text = "W=" + std::to_string((int)laneW_avg) + "px";

@@ -182,10 +182,10 @@ void Executive::run()
             handleKeyboardTick();
         }
 
-        // Telemetry reception is independent of keyboard input. Headless
-        // operation must continue draining STM32 telemetry every loop.
-        telemetryTick();
-        parkingNetworkTick();
+        if (config_.runtime.enable_keyboard) {
+            handleKeyboardTick();
+            telemetryTick();
+        }
 
         if (scheduler_.camera.ready(now)) {
             scheduler_.camera.mark(now);
@@ -579,6 +579,7 @@ void Executive::controlTick()
 void Executive::loggingTick() const
 {
     const VehicleTelemetryMsg telemetry = latest_telemetry_;
+    const UartRxStats uart_stats = vehicle_.rxStats();
 
     const std::uint64_t now = nowMs();
 
@@ -635,11 +636,22 @@ void Executive::loggingTick() const
                 << " speed=" << safe.speed_mps
                 << " tel=" << telemetry_state
                 << " ageMs=" << telemetry_age_ms
-                << " rxHz=" << telemetry_rx_hz_
+
+                // Executive-side consume statistics.
+                << " consumeHz=" << telemetry_rx_hz_
                 << " telSeq=" << telemetry.packet_sequence
-                << " seqGap=" << telemetry_sequence_gaps_
-                << " dup=" << telemetry_duplicate_frames_
-                << " seqReset=" << telemetry_sequence_resets_
+                << " consumeSeqSkip=" << telemetry_sequence_gaps_
+                << " consumeDup=" << telemetry_duplicate_frames_
+                << " consumeReset=" << telemetry_sequence_resets_
+
+                // True UART RX-thread statistics.
+                << " uartHz=" << uart_stats.parsed_hz
+                << " uartFrames=" << uart_stats.parsed_frames
+                << " uartGap=" << uart_stats.transport_sequence_gaps
+                << " uartDup=" << uart_stats.duplicate_frames
+                << " uartReset=" << uart_stats.sequence_resets
+                << " qDrop=" << uart_stats.queue_dropped_frames
+                << " latestSkip=" << uart_stats.latest_skipped_frames
 
                 << " encV=" << (telemetry.encoder.valid ? 1 : 0)
                 << " encSeq=" << telemetry.encoder.sequence

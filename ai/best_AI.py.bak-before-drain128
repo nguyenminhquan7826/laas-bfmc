@@ -262,7 +262,7 @@ class YOLOv8ONNX:
         options = ort.SessionOptions()
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        options.intra_op_num_threads = 2
+        options.intra_op_num_threads = 3
         options.inter_op_num_threads = 1
 
         self.settings = settings
@@ -587,34 +587,17 @@ def recv_latest_frame(
             latest_address = address
             break
 
-    # Inference is normally slower than camera capture.
-    # Drain a bounded amount of queued UDP data so this function cannot
-    # spend several seconds following a continuously arriving camera stream.
-    # Drain only packets that are already queued.
-    # Temporarily switch the socket to true non-blocking mode so we never
-    # wait for future camera packets while trying to catch up.
-    previous_timeout = sock.gettimeout()
-    sock.setblocking(False)
-
-    try:
-        drain_deadline = time.monotonic() + 0.010
-
-        for _ in range(512):
-            if time.monotonic() >= drain_deadline:
-                break
-
-            try:
-                packet, address = sock.recvfrom(65535)
-            except BlockingIOError:
-                break
-
-            frame = reassembler.add_packet(packet, address)
-
-            if frame is not None:
-                latest_frame = frame
-                latest_address = address
-    finally:
-        sock.settimeout(previous_timeout)
+    # Inference is normally slower than camera capture. Drain queued packets
+    # and keep the newest complete frame so AI latency does not grow over time.
+    for _ in range(4096):
+        try:
+            packet, address = sock.recvfrom(65535, socket.MSG_DONTWAIT)
+        except BlockingIOError:
+            break
+        frame = reassembler.add_packet(packet, address)
+        if frame is not None:
+            latest_frame = frame
+            latest_address = address
 
     assert latest_frame is not None and latest_address is not None
     return latest_frame, latest_address

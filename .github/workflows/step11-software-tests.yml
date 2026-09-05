@@ -91,6 +91,44 @@ jobs:
       - name: Run Step 12 trajectory status policy test
         run: /tmp/test_parking_trajectory_status_policy
 
+  full-app-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install application build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            pkg-config \
+            libopencv-dev \
+            libjson-c-dev
+
+      - name: Configure laas_pp with parking client
+        run: |
+          cmake -S . -B build-ci \
+            -DLAAS_USE_LIBSERIAL=OFF \
+            -DLAAS_BUILD_MPC=OFF \
+            -DLAAS_BUILD_PARKING_CLIENT=ON
+
+      - name: Build full laas_pp
+        run: cmake --build build-ci --target laas_pp -j2
+
+      - name: Verify parking client compiled and parking bench has no UART send
+        run: |
+          grep -q 'LAAS_ENABLE_PARKING_CLIENT' build-ci/CMakeFiles/laas_pp.dir/flags.make
+          if sed -n '/void Executive::parkingBenchControlTick()/,/^}/p' src/execution_control/Executive.cpp \
+             | grep -v '^[[:space:]]*//' \
+             | grep -q 'vehicle_\.send'; then
+            echo '[FAIL] parkingBenchControlTick contains UART send'
+            exit 1
+          fi
+          echo '[PASS] full app build + parking client + NO PARKING UART'
+
   parking-e2e:
     runs-on: ubuntu-latest
 

@@ -29,6 +29,8 @@
 #include "../logical_robot/UartVehicleInterface.hpp"
 #ifdef LAAS_ENABLE_PARKING_CLIENT
 #include "../logical_robot/ParkingServerClient.hpp"
+#include "../logical_robot/ParkingSessionSyncPolicy.hpp"
+#include "../logical_robot/ParkingTrajectoryStatusPolicy.hpp"
 #endif
 
 namespace laas {
@@ -69,6 +71,17 @@ private:
         bool has_trajectory_id);
 
     void flushParkingSafetyEvents();
+
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+    void applyParkingSessionSnapshot(
+        const ParkingSessionSnapshot& session);
+
+    void clearLocalParkingTrajectory(
+        const std::string& reason);
+
+    void parkingTrajectoryStatusSyncTick(
+        const ParkingTrajectoryMsg& trajectory);
+#endif
 
     void controlTick();
     void loggingTick() const;
@@ -156,6 +169,15 @@ private:
 
 #ifdef LAAS_ENABLE_PARKING_CLIENT
     bool parking_server_connected_{false};
+
+    // Step-12: a TCP connection alone does not authorize parking motion.
+    // Executive holds parking until the Server session snapshot is reconciled
+    // with the local trajectory. Reconnect always re-enters this hold.
+    bool parking_session_query_pending_{false};
+    bool parking_session_sync_hold_{true};
+    std::string parking_session_sync_reason_{"NOT_CONNECTED"};
+
+    ParkingTrajectoryStatusPolicy parking_trajectory_status_policy_;
 #endif
 };
 

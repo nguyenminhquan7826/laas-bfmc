@@ -27,7 +27,9 @@ jobs:
           grep -q 'sendSessionQuery' src/execution_control/Executive.cpp
           grep -q 'ParkingSessionSyncPolicy::evaluate' src/execution_control/Executive.cpp
           grep -q 'kActuationAuthorized = false' src/execution_control/Executive.cpp
-          if sed -n '/void Executive::parkingBenchControlTick()/,/^}/p' src/execution_control/Executive.cpp | grep -q 'vehicle_\.send'; then
+          if sed -n '/void Executive::parkingBenchControlTick()/,/^}/p' src/execution_control/Executive.cpp \
+             | grep -v '^[[:space:]]*//' \
+             | grep -q 'vehicle_\.send'; then
             echo '[FAIL] parkingBenchControlTick contains UART send'
             exit 1
           fi

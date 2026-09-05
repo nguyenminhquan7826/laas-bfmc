@@ -1,9 +1,10 @@
-name: Step 11 Software Tests
+name: Parking Software Tests
 
 on:
   push:
     branches:
       - step11-software-tests
+      - step12-status-sync
   pull_request:
     branches:
       - main
@@ -30,7 +31,7 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q .
 
-      - name: Run Step 11 server tests
+      - name: Run server tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
   cpp-client-tests:
@@ -60,6 +61,24 @@ jobs:
 
       - name: Run ParkingServerClient TCP/NDJSON tests
         run: timeout 20s /tmp/test_parking_server_client
+
+  step12-session-sync-policy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Step 12 session sync policy test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Iserver_v1/tests/cpp_stubs \
+            -Isrc \
+            server_v1/tests/test_parking_session_sync_policy.cpp \
+            -o /tmp/test_parking_session_sync_policy
+
+      - name: Run Step 12 session sync policy test
+        run: /tmp/test_parking_session_sync_policy
 
   parking-e2e:
     runs-on: ubuntu-latest

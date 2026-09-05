@@ -263,6 +263,30 @@ def freshness_reason(ctx: ServerContext, snap: dict[str, Any]) -> tuple[bool, st
     return True, "ok"
 
 
+def normalize_source_seq(source_seq: Any, snap: dict[str, Any]) -> int:
+    """Return a protocol-valid source sequence for every trajectory.
+
+    Safety events do not currently carry a `seq`, but safety clear/invalid can
+    trigger replanning. In that case, anchor the trajectory to the freshest
+    accepted Pi input sequence instead of serializing `null`, which the C++
+    protocol decoder correctly rejects.
+    """
+    if isinstance(source_seq, int) and not isinstance(source_seq, bool) and source_seq >= 0:
+        return source_seq
+
+    pose_seq = snap.get("pose_seq")
+    if isinstance(pose_seq, int) and not isinstance(pose_seq, bool) and pose_seq >= 0:
+        return pose_seq
+
+    parking_status = snap.get("parking_status")
+    if isinstance(parking_status, dict):
+        parking_seq = parking_status.get("seq")
+        if isinstance(parking_seq, int) and not isinstance(parking_seq, bool) and parking_seq >= 0:
+            return parking_seq
+
+    return 0
+
+
 def validate_plan_candidate(
     ctx: ServerContext,
     selected: SlotPlan,
@@ -317,6 +341,11 @@ def validate_serialized_trajectory(
         return False, "trajectory_map_id_mismatch"
     if response.get("reference_point") != "rear_axle_center":
         return False, "trajectory_reference_point_mismatch"
+
+    source_seq = response.get("source_seq")
+    if not isinstance(source_seq, int) or isinstance(source_seq, bool) or source_seq < 0:
+        return False, "trajectory_source_seq_invalid"
+
     target_slot = response.get("target_slot")
     if target_slot not in SLOT_IDS or states.get(str(target_slot)) != "FREE":
         return False, "trajectory_target_not_free"
@@ -444,6 +473,7 @@ class Handler(socketserver.StreamRequestHandler):
             return
 
         snap = self.ctx.snapshot()
+        source_seq = normalize_source_seq(source_seq, snap)
         fresh, reason = freshness_reason(self.ctx, snap)
         if not fresh:
             status = "WAITING_FOR_INPUT" if reason.startswith("no_") else "STALE_INPUT"
@@ -495,7 +525,7 @@ class Handler(socketserver.StreamRequestHandler):
                 "STALE_INPUT",
                 reason,
                 pose_age_ms=None if post["pose_age_ms"] is None else round(float(post["pose_age_ms"]), 1),
-                parking_age_ms=None if post["parking_age_ms"] is None else round(float(post["parking_age_ms"]), 1),
+                parking_age_ms=None if post["parking_age_age_ms"] is None else round(float(post["parking_age_ms"]), 1),
             )
             print(f"[GUARD] seq={source_seq} reject={reason}_after_planning")
             return

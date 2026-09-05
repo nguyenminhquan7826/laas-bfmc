@@ -42,6 +42,21 @@ public:
         safe_cmd_ = msg;
     }
 
+    void setVehiclePose(const VehiclePoseMsg& msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        vehicle_pose_ = msg;
+    }
+
+    void setParkingStatus(const ParkingStatusMsg& msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        parking_status_ = msg;
+    }
+
+    void setParkingTrajectory(const ParkingTrajectoryMsg& msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        parking_trajectory_ = msg;
+    }
+
     FrameMsg frame() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return frame_;
@@ -77,6 +92,21 @@ public:
         return safe_cmd_;
     }
 
+    VehiclePoseMsg vehiclePose() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return vehicle_pose_;
+    }
+
+    ParkingStatusMsg parkingStatus() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return parking_status_;
+    }
+
+    ParkingTrajectoryMsg parkingTrajectory() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return parking_trajectory_;
+    }
+
 private:
     mutable std::mutex mutex_;
 
@@ -87,6 +117,10 @@ private:
     TrajectoryMsg trajectory_;
     ControlCmdMsg raw_cmd_;
     ControlCmdMsg safe_cmd_;
+
+    VehiclePoseMsg vehicle_pose_;
+    ParkingStatusMsg parking_status_;
+    ParkingTrajectoryMsg parking_trajectory_;
 };
 
 }  // namespace laas

@@ -1,11 +1,13 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 #include <opencv2/opencv.hpp>
 
 namespace laas {
 
+enum class OperatingMode { LANE_DRIVING = 0, PARKING };
 enum class LaneLineType { UNKNOWN = 0, SOLID, DASHED };
 enum class ControlMode { MPC = 0, PURE_PURSUIT };
 enum class BehaviorMode {
@@ -83,6 +85,66 @@ struct ControlCmdMsg {
     float speed_mps = 0.0F;
     float steering_deg = 0.0F;
     int servo_cmd = 0;
+};
+
+// Parking messages use the Server V1 map frame in metres/radians. They are
+// intentionally separate from TrajectoryMsg, whose centerlines are BEV pixels.
+struct VehiclePoseMsg {
+    Header header;
+    std::uint64_t sequence = 0;
+    std::string map_id;
+    std::string source;
+    double x_m = 0.0;
+    double y_m = 0.0;
+    double yaw_rad = 0.0;
+};
+
+enum class ParkingSlotState { UNKNOWN = 0, FREE, OCCUPIED };
+
+struct ParkingSlotObservation {
+    std::string id;
+    ParkingSlotState state = ParkingSlotState::UNKNOWN;
+    float confidence = 0.0F;
+};
+
+struct ParkingObjectEvidence {
+    std::string class_name;
+    float confidence = 0.0F;
+    double relative_x_m = 0.0;
+    double relative_y_m = 0.0;
+    std::string associated_slot;
+};
+
+struct ParkingStatusMsg {
+    Header header;
+    std::uint64_t sequence = 0;
+    std::string map_id;
+    std::vector<ParkingSlotObservation> slots;
+    std::vector<ParkingObjectEvidence> objects;
+};
+
+enum class MotionDirection { FORWARD = 0, REVERSE };
+
+struct ParkingTrajectoryPoint {
+    double x_m = 0.0;
+    double y_m = 0.0;
+    double yaw_rad = 0.0;
+    float v_ref_mps = 0.0F;
+    MotionDirection direction = MotionDirection::FORWARD;
+};
+
+struct ParkingTrajectoryMsg {
+    Header header;  // Pi receive time for the complete Server trajectory
+    std::uint32_t protocol_version = 0;
+    std::uint64_t trajectory_id = 0;
+    std::uint64_t source_seq = 0;
+    std::string map_id;
+    std::string target_slot;
+    std::string reference_point;
+    std::string goal_mode;
+    std::string validation;
+    std::string prototype_warning;
+    std::vector<ParkingTrajectoryPoint> points;
 };
 
 struct EncoderTelemetry {

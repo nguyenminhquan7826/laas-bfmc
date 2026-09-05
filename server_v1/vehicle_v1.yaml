@@ -1,0 +1,31 @@
+schema_version: 1
+vehicle_id: cybertruck_1_10_v1
+units:
+  distance: m
+  angle: rad
+geometry:
+  reference_point: rear_axle_center
+  length_m: 0.432
+  width_m: 0.210
+  wheelbase_m: 0.2515
+  track_width_m: 0.1615
+  rear_overhang_m: null
+  front_overhang_m: null
+  # rear axle -> geometric body center along vehicle longitudinal axis.
+  # Once rear_overhang_m is measured: length_m/2 - rear_overhang_m
+  body_center_from_rear_axle_m: null
+steering:
+  software_limit_deg: 25.0
+  thesis_measured_vehicle_angle_deg_at_servo_30: 22.84
+  planner_max_steering_deg: null
+motion:
+  parking_nominal_speed_mps: 0.10
+  direction_modes: [FORWARD, REVERSE]
+verification_status:
+  wheelbase:
+    status: SOFTWARE_BASELINE_PENDING_PHYSICAL_MEASUREMENT
+    current_value_m: 0.2515
+    conflicting_reported_value_m: 0.1895
+  rear_overhang: TBD_MEASURE
+  front_overhang: TBD_MEASURE
+  planner_max_steering: TBD_MEASURE

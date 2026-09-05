@@ -16,6 +16,15 @@ namespace laas {
 
 namespace {
 
+const char* operatingModeToString(OperatingMode mode)
+{
+    switch (mode) {
+    case OperatingMode::LANE_DRIVING: return "LANE";
+    case OperatingMode::PARKING: return "PARKING";
+    default: return "UNKNOWN";
+    }
+}
+
 const char* behaviorToString(BehaviorMode mode)
 {
     switch (mode) {
@@ -79,14 +88,22 @@ Executive::Executive(const Config& config)
       camera_(config_),
       yolo_(config_),
       vehicle_(config_),
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+      parking_server_(config_),
+#endif
       lane_perception_(config_),
+      parking_status_bench_source_(config_),
+      vehicle_pose_estimator_(config_),
       mission_(config_),
       planner_(config_),
       pure_pursuit_(config_),
+      parking_trajectory_tracker_(config_),
 #ifdef LAAS_ENABLE_MPC
       mpc_(config_),
 #endif
-      safety_(config_)
+      safety_(config_),
+      parking_trajectory_validator_(config_),
+      parking_safety_filter_(config_)
 {
     configureScheduler();
 }
@@ -129,6 +146,17 @@ bool Executive::init()
         return false;
     }
 
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+    if (config_.parking.enable) {
+        parking_server_.init();
+    }
+#else
+    if (config_.parking.enable) {
+        std::cerr << "[PARKING] Parking client unavailable in this build. "
+                  << "Install libjson-c-dev and rebuild.\n";
+    }
+#endif
+
     const uint64_t now = nowMs();
     scheduler_.reset(now);
     state_.store(RuntimeState::READY);
@@ -154,10 +182,10 @@ void Executive::run()
             handleKeyboardTick();
         }
 
-        if (config_.runtime.enable_keyboard) {
-            handleKeyboardTick();
-            telemetryTick();
-        }
+        // Telemetry reception is independent of keyboard input. Headless
+        // operation must continue draining STM32 telemetry every loop.
+        telemetryTick();
+        parkingNetworkTick();
 
         if (scheduler_.camera.ready(now)) {
             scheduler_.camera.mark(now);
@@ -187,6 +215,7 @@ void Executive::run()
         if (scheduler_.control.ready(now)) {
             scheduler_.control.mark(now);
             controlTick();
+            parkingBenchControlTick();
         }
 
         if (scheduler_.logging.ready(now)) {
@@ -213,6 +242,9 @@ void Executive::stop()
 {
     running_.store(false);
     yolo_.close();
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+    parking_server_.close();
+#endif
     vehicle_.close();
     camera_.close();
 }
@@ -412,6 +444,121 @@ void Executive::telemetryTick()
         telemetry.packet_sequence;
 
     latest_telemetry_ = telemetry;
+
+    VehiclePoseMsg pose;
+    if (vehicle_pose_estimator_.process(telemetry, pose)) {
+        blackboard_.setVehiclePose(pose);
+    }
+}
+
+void Executive::parkingNetworkTick()
+{
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+    if (!config_.parking.enable) {
+        return;
+    }
+
+    ParkingStatusMsg bench_status;
+    if (parking_status_bench_source_.process(nowMs(), bench_status)) {
+        blackboard_.setParkingStatus(bench_status);
+    }
+
+    parking_server_.service();
+    parking_server_connected_ = parking_server_.connected();
+
+    ParkingServerMessage server_message;
+    while (parking_server_.popMessage(server_message)) {
+        if (server_message.type == ParkingServerMessageType::TRAJECTORY) {
+            const VehiclePoseMsg current_pose = blackboard_.vehiclePose();
+            const ParkingTrajectoryValidationResult validation =
+                parking_trajectory_validator_.validate(
+                    server_message.trajectory, current_pose);
+
+            if (validation.accepted) {
+                blackboard_.setParkingTrajectory(server_message.trajectory);
+                parking_server_.sendTrajectoryStatus(
+                    parking_status_tx_sequence_++,
+                    server_message.trajectory.trajectory_id,
+                    "RECEIVED", validation.reason);
+                std::cout << "[PARKING] trajectory tid="
+                          << server_message.trajectory.trajectory_id
+                          << " slot=" << server_message.trajectory.target_slot
+                          << " points=" << server_message.trajectory.points.size()
+                          << " PiCheck=PASS (bench only)\n";
+            } else {
+                parking_server_.sendTrajectoryStatus(
+                    parking_status_tx_sequence_++,
+                    server_message.trajectory.trajectory_id,
+                    "REJECTED", validation.reason);
+                std::cerr << "[PARKING] trajectory tid="
+                          << server_message.trajectory.trajectory_id
+                          << " PiCheck=REJECT reason=" << validation.reason
+                          << "\n";
+            }
+        } else if (server_message.type == ParkingServerMessageType::PLANNING_RESULT) {
+            std::cout << "[PARKING] planning_result=" << server_message.status
+                      << " reason=" << server_message.reason << "\n";
+        } else if (server_message.type == ParkingServerMessageType::ERROR) {
+            std::cerr << "[PARKING] protocol/network error: "
+                      << server_message.reason << "\n";
+        }
+    }
+
+    if (!parking_server_connected_) {
+        return;
+    }
+
+    const VehiclePoseMsg pose = blackboard_.vehiclePose();
+    if (pose.header.valid &&
+        (!have_sent_pose_sequence_ || pose.sequence != last_sent_pose_sequence_)) {
+        if (parking_server_.sendVehiclePose(pose)) {
+            last_sent_pose_sequence_ = pose.sequence;
+            have_sent_pose_sequence_ = true;
+        }
+    }
+
+    const ParkingStatusMsg parking_status = blackboard_.parkingStatus();
+    if (parking_status.header.valid &&
+        (!have_sent_parking_status_sequence_ ||
+         parking_status.sequence != last_sent_parking_status_sequence_)) {
+        if (parking_server_.sendParkingStatus(parking_status)) {
+            last_sent_parking_status_sequence_ = parking_status.sequence;
+            have_sent_parking_status_sequence_ = true;
+        }
+    }
+#endif
+}
+
+void Executive::parkingBenchControlTick()
+{
+    parking_bench_raw_command_ = ControlCmdMsg{};
+    parking_bench_safe_command_ = ControlCmdMsg{};
+    parking_tracker_debug_ = ParkingTrackerDebug{};
+    parking_safety_result_ = ParkingSafetyResult{};
+
+    if (!config_.parking.enable || !config_.parking.bench_mode ||
+        !config_.parking.enable_bench_tracker) {
+        return;
+    }
+
+    const VehiclePoseMsg pose = blackboard_.vehiclePose();
+    const ParkingTrajectoryMsg trajectory = blackboard_.parkingTrajectory();
+    const ObstacleMsg obstacle = blackboard_.obstacle();
+
+    // Tracker output is a raw parking command only. It is never sent to UART.
+    parking_trajectory_tracker_.process(
+        pose, trajectory, parking_bench_raw_command_, &parking_tracker_debug_);
+
+    bool server_connected = false;
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+    server_connected = parking_server_connected_;
+#endif
+
+    parking_bench_safe_command_ = parking_safety_filter_.filter(
+        parking_bench_raw_command_, parking_tracker_debug_, pose, trajectory,
+        latest_telemetry_, obstacle, server_connected, &parking_safety_result_);
+
+    // Deliberately no vehicle_.send(...) here. Step-10 is observation/bench only.
 }
 
 void Executive::controlTick()
@@ -457,8 +604,25 @@ void Executive::loggingTick() const
     const TrajectoryMsg trajectory = blackboard_.trajectory();
     const ControlCmdMsg safe = blackboard_.safeCommand();
 
+    if (config_.parking.enable && config_.parking.bench_mode &&
+        config_.parking.enable_bench_tracker && parking_safety_result_.evaluated) {
+        std::cout << "[PARKING_BENCH] tid=" << parking_tracker_debug_.trajectory_id
+                  << " idx=" << parking_tracker_debug_.nearest_index
+                  << "->" << parking_tracker_debug_.target_index
+                  << " dir="
+                  << (parking_tracker_debug_.direction == MotionDirection::REVERSE
+                          ? "REV" : "FWD")
+                  << " raw_v=" << parking_bench_raw_command_.speed_mps
+                  << " safe_v=" << parking_bench_safe_command_.speed_mps
+                  << " steer_deg=" << parking_bench_safe_command_.steering_deg
+                  << " cte=" << parking_tracker_debug_.nearest_distance_m
+                  << " safety=" << parking_safety_result_.reason
+                  << " [NO_UART]\n";
+    }
+
     std::cout   << "[EXEC] "
-                << "mode=" << behaviorToString(behavior.mode)
+                << "op=" << operatingModeToString(operating_mode_.load())
+                << " mode=" << behaviorToString(behavior.mode)
                 << " planner=" << plannerStateToString(trajectory.planner_state)
                 << " plan=" << ((trajectory.header.valid && trajectory.collision_free) ? "SAFE" : "BLOCKED")
                 << " dir=" << directionToString(trajectory.direction)

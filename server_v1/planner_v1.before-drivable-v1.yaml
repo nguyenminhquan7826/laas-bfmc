@@ -1,0 +1,42 @@
+schema_version: 1
+planner_id: hybrid_astar_v1
+status: OFFLINE_PROTOTYPE
+search:
+  grid_resolution_m: 0.05
+  yaw_resolution_deg: 10.0
+  motion_step_m: 0.1
+  integration_step_m: 0.02
+  max_expansions: 120000
+motion:
+  steering_samples_deg:
+  - -25.0
+  - 0.0
+  - 25.0
+  allow_forward: true
+  allow_reverse: true
+cost:
+  reverse_multiplier: 1.35
+  direction_switch_penalty: 0.3
+  steering_penalty: 0.04
+  steering_change_penalty: 0.06
+  yaw_heuristic_weight: 0.08
+goal:
+  position_tolerance_m: 0.08
+  yaw_tolerance_deg: 12.0
+  required_final_direction: ANY
+  desired_vehicle_alignment: BODY_CENTER_AT_SLOT_CENTER_AND_BODY_PARALLEL_TO_SLOT_SIDES
+  goal_mode: BODY_CENTER_TARGET_REAR_AXLE_PROXY_UNTIL_GEOMETRY_MEASURED
+collision:
+  mode: REAR_AXLE_POINT_ONLY
+  obstacle_inflation_m: 0.03
+  treat_unknown_slots_as_blocked: true
+  require_drivable_area: true
+  drivable_area_ids:
+  - parking_sector
+  drivable_reference: rear_axle_center
+  drivable_semantics_note: Current V1 constrains only the rear-axle reference point to the CAD-derived parking-sector planner polygon; full vehicle footprint remains pending.
+notes:
+- Standard bicycle model uses tan(delta), not the sin(delta) typo seen in the thesis equation.
+- Final motion direction may be FORWARD or REVERSE; terminal pose quality is what defines parking success.
+- Planner output is simulation-only until vehicle footprint geometry is physically verified.
+- UNKNOWN is never treated as a candidate FREE parking slot.

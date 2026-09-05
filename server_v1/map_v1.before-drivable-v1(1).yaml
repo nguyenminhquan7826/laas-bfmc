@@ -1,0 +1,174 @@
+schema_version: 2
+map_id: map_v1
+units:
+  distance: m
+  angle: rad
+frame:
+  id: map
+  origin: bottom_left
+  x_axis: right
+  y_axis: up
+  yaw_zero_axis: +x
+  yaw_positive: counterclockwise
+map:
+  width_x_m: 4.469
+  height_y_m: 4.41
+parking_block:
+  id: parking_main
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINES
+  x_min_m: 1.73111
+  x_max_m: 3.367126
+  y_min_m: 0.216149
+  y_max_m: 1.345495
+  road_band:
+    x_min_m: 1.73111
+    x_max_m: 3.367126
+    y_min_m: 0.581798
+    y_max_m: 0.977994
+    width_m: 0.396196
+  cad_dimensions_m:
+    bottom_left_slot_width: 0.812804
+    bottom_right_slot_width: 0.818481
+    bottom_slot_depth: 0.365649
+    top_left_slot_width: 0.808546
+    top_right_slot_width: 0.822265
+    top_slot_depth: 0.3675
+slots:
+- id: P_B1
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: bottom
+  polygon_m:
+  - - 1.73111
+    - 0.216149
+  - - 2.543914
+    - 0.216149
+  - - 2.543914
+    - 0.581798
+  - - 1.73111
+    - 0.581798
+  center_m:
+  - 2.137512
+  - 0.398974
+  goal_pose: null
+- id: P_B2
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: bottom
+  polygon_m:
+  - - 2.543914
+    - 0.216149
+  - - 3.362395
+    - 0.216149
+  - - 3.362395
+    - 0.581798
+  - - 2.543914
+    - 0.581798
+  center_m:
+  - 2.953155
+  - 0.398974
+  goal_pose: null
+- id: P_T1
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: top
+  polygon_m:
+  - - 1.736314
+    - 0.977994
+  - - 2.54486
+    - 0.977994
+  - - 2.54486
+    - 1.345495
+  - - 1.736314
+    - 1.345495
+  center_m:
+  - 2.140588
+  - 1.161744
+  goal_pose: null
+- id: P_T2
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: top
+  polygon_m:
+  - - 2.54486
+    - 0.977994
+  - - 3.367126
+    - 0.977994
+  - - 3.367126
+    - 1.345495
+  - - 2.54486
+    - 1.345495
+  center_m:
+  - 2.955993
+  - 1.161744
+  goal_pose: null
+notes:
+- The CAD PDF is the authoritative visual geometry source for map_v1.
+- For parking-slot geometry in planner tests, CAD paint-marking centerlines are authoritative
+  because the uploaded PDF is the exact map.
+- Previous manual parking dimensions are preserved under legacy_manual_parking_measurements
+  for later physical cross-check.
+- goal_pose remains unset until rear-axle-to-body geometry is physically verified.
+- UNKNOWN must never be treated as FREE by the server slot selector.
+- Do not use white paint markings themselves as collision obstacles; drivable-area
+  semantics are classified separately.
+source:
+  type: autocad_vector_pdf
+  file: map_source.pdf
+  original_uploaded_name: Part2 (1).pdf
+  page: 1
+  geometry_file: map_lines_v1.json
+  pdf_plot_extent_pt:
+    x_min: 14.0
+    x_max: 580.76
+    y_top: 219.8
+    y_bottom: 791.48
+  transform_pdf_to_map:
+    scale_x_m_per_pt: 0.007885171854
+    scale_y_m_per_pt: 0.007714105793
+    x_formula: x_m = (x_pt - 14.0) * scale_x_m_per_pt
+    y_formula: y_m = (791.48 - y_pt) * scale_y_m_per_pt
+  note: X and Y are scaled independently to the physically measured map size.
+  render_reference_file: map_reference.png
+geometry:
+  visual_reference: EXTRACTED_FROM_CAD_VECTOR
+  white_stroke_paths: map_lines_v1.json
+  semantic_status: ROAD_BOUNDARY_CLASSIFICATION_PENDING
+  planner_scope: PARKING_LOCAL_TEST_ONLY
+  markings_policy:
+    crosswalk_stripes: MARKING_NOT_PHYSICAL_OBSTACLE
+    dashed_center_lines: MARKING_NOT_PHYSICAL_OBSTACLE
+    parking_bay_lines: MARKING_NOT_PHYSICAL_OBSTACLE
+    solid_outer_road_edges: CANDIDATE_DRIVABLE_BOUNDARY
+  render_reference: map_reference.png
+validation:
+  parking_reference_check:
+    measured_left_offset_m: 1.719
+    cad_reference_left_edge_m: 1.725906
+    delta_left_m: 0.006906
+    measured_bottom_offset_m: 0.228
+    cad_reference_bottom_edge_m: 0.225869
+    delta_bottom_m: -0.002131
+    status: CONSISTENT_WITHIN_PLOT_LINE_EDGE_TOLERANCE
+  cad_slot_alignment:
+    method: average paired PDF vector edges to obtain paint-marking centerlines
+    status: ACTIVE_FOR_OFFLINE_TEST
+    manual_vs_cad_conflict: PRESENT
+    note: Screenshot showed previous manual slot polygons were visibly narrower/shifted
+      relative to CAD bays.
+legacy_manual_parking_measurements:
+  status: PRESERVED_FOR_CROSS_CHECK
+  source: previous_manual_measurements
+  id: parking_main
+  x_min_m: 1.719
+  x_max_m: 3.283
+  y_min_m: 0.228
+  y_max_m: 1.2742
+  slot_width_along_road_m: 0.782
+  slot_depth_m: 0.3481
+  center_road_width_m: 0.35
+  road_band:
+    x_min_m: 1.719
+    x_max_m: 3.283
+    y_min_m: 0.5761
+    y_max_m: 0.9261

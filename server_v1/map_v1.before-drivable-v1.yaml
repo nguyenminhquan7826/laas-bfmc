@@ -1,0 +1,436 @@
+schema_version: 2
+map_id: map_v1
+units:
+  distance: m
+  angle: rad
+frame:
+  id: map
+  origin: bottom_left
+  x_axis: right
+  y_axis: up
+  yaw_zero_axis: +x
+  yaw_positive: counterclockwise
+map:
+  width_x_m: 4.469
+  height_y_m: 4.41
+parking_block:
+  id: parking_main
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINES
+  x_min_m: 1.73111
+  x_max_m: 3.367126
+  y_min_m: 0.216149
+  y_max_m: 1.345495
+  road_band:
+    x_min_m: 1.73111
+    x_max_m: 3.367126
+    y_min_m: 0.581798
+    y_max_m: 0.977994
+    width_m: 0.396196
+  cad_dimensions_m:
+    bottom_left_slot_width: 0.812804
+    bottom_right_slot_width: 0.818481
+    bottom_slot_depth: 0.365649
+    top_left_slot_width: 0.808546
+    top_right_slot_width: 0.822265
+    top_slot_depth: 0.3675
+slots:
+- id: P_B1
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: bottom
+  polygon_m:
+  - - 1.73111
+    - 0.216149
+  - - 2.543914
+    - 0.216149
+  - - 2.543914
+    - 0.581798
+  - - 1.73111
+    - 0.581798
+  center_m:
+  - 2.137512
+  - 0.398974
+  goal_pose: null
+- id: P_B2
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: bottom
+  polygon_m:
+  - - 2.543914
+    - 0.216149
+  - - 3.362395
+    - 0.216149
+  - - 3.362395
+    - 0.581798
+  - - 2.543914
+    - 0.581798
+  center_m:
+  - 2.953155
+  - 0.398974
+  goal_pose: null
+- id: P_T1
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: top
+  polygon_m:
+  - - 1.736314
+    - 0.977994
+  - - 2.54486
+    - 0.977994
+  - - 2.54486
+    - 1.345495
+  - - 1.736314
+    - 1.345495
+  center_m:
+  - 2.140588
+  - 1.161744
+  goal_pose: null
+- id: P_T2
+  state_default: UNKNOWN
+  geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
+  row: top
+  polygon_m:
+  - - 2.54486
+    - 0.977994
+  - - 3.367126
+    - 0.977994
+  - - 3.367126
+    - 1.345495
+  - - 2.54486
+    - 1.345495
+  center_m:
+  - 2.955993
+  - 1.161744
+  goal_pose: null
+notes:
+- The CAD PDF is the authoritative visual geometry source for map_v1.
+- For parking-slot geometry in planner tests, CAD paint-marking centerlines are authoritative because the uploaded PDF is the exact map.
+- Previous manual parking dimensions are preserved under legacy_manual_parking_measurements for later physical cross-check.
+- goal_pose remains unset until rear-axle-to-body geometry is physically verified.
+- UNKNOWN must never be treated as FREE by the server slot selector.
+- Do not use white paint markings themselves as collision obstacles; drivable-area semantics are classified separately.
+- Hybrid A* V1 is constrained to drivable_areas[].planner_polygon_m for the current parking-sector test.
+source:
+  type: autocad_vector_pdf
+  file: map_source.pdf
+  original_uploaded_name: Part2 (1).pdf
+  page: 1
+  geometry_file: map_lines_v1.json
+  pdf_plot_extent_pt:
+    x_min: 14.0
+    x_max: 580.76
+    y_top: 219.8
+    y_bottom: 791.48
+  transform_pdf_to_map:
+    scale_x_m_per_pt: 0.007885171854
+    scale_y_m_per_pt: 0.007714105793
+    x_formula: x_m = (x_pt - 14.0) * scale_x_m_per_pt
+    y_formula: y_m = (791.48 - y_pt) * scale_y_m_per_pt
+  note: X and Y are scaled independently to the physically measured map size.
+  render_reference_file: map_reference.png
+geometry:
+  visual_reference: EXTRACTED_FROM_CAD_VECTOR
+  white_stroke_paths: map_lines_v1.json
+  semantic_status: PARKING_SECTOR_DRIVABLE_ACTIVE
+  planner_scope: PARKING_SECTOR_DRIVABLE_TEST
+  markings_policy:
+    crosswalk_stripes: MARKING_NOT_PHYSICAL_OBSTACLE
+    dashed_center_lines: MARKING_NOT_PHYSICAL_OBSTACLE
+    parking_bay_lines: MARKING_NOT_PHYSICAL_OBSTACLE
+    solid_outer_road_edges: CANDIDATE_DRIVABLE_BOUNDARY
+  render_reference: map_reference.png
+validation:
+  parking_reference_check:
+    measured_left_offset_m: 1.719
+    cad_reference_left_edge_m: 1.725906
+    delta_left_m: 0.006906
+    measured_bottom_offset_m: 0.228
+    cad_reference_bottom_edge_m: 0.225869
+    delta_bottom_m: -0.002131
+    status: CONSISTENT_WITHIN_PLOT_LINE_EDGE_TOLERANCE
+  cad_slot_alignment:
+    method: average paired PDF vector edges to obtain paint-marking centerlines
+    status: ACTIVE_FOR_OFFLINE_TEST
+    manual_vs_cad_conflict: PRESENT
+    note: Screenshot showed previous manual slot polygons were visibly narrower/shifted relative to CAD bays.
+  drivable_area_check:
+    area_id: parking_sector
+    start_pose_inside: true
+    all_four_slot_centers_inside: true
+    planner_margin_m: 0.02
+    status: ACTIVE
+legacy_manual_parking_measurements:
+  status: PRESERVED_FOR_CROSS_CHECK
+  source: previous_manual_measurements
+  id: parking_main
+  x_min_m: 1.719
+  x_max_m: 3.283
+  y_min_m: 0.228
+  y_max_m: 1.2742
+  slot_width_along_road_m: 0.782
+  slot_depth_m: 0.3481
+  center_road_width_m: 0.35
+  road_band:
+    x_min_m: 1.719
+    x_max_m: 3.283
+    y_min_m: 0.5761
+    y_max_m: 0.9261
+drivable_areas:
+- id: parking_sector
+  status: ACTIVE_FOR_OFFLINE_PLANNER_TEST
+  source: CAD_PDF_BOUNDARY_COMPONENT
+  description: Connected drivable region containing the current parking road, four parking bays, right-hand return curve, and middle ramp.
+  reference_seed_m:
+  - 1.3
+  - 0.7511
+  raw_polygon_m:
+  - - 0.91235
+    - 0.596396
+  - - 1.847414
+    - 0.592692
+  - - 1.847414
+    - 0.570466
+  - - 1.7452
+    - 0.570466
+  - - 1.7452
+    - 0.229668
+  - - 2.53073
+    - 0.229668
+  - - 2.53073
+    - 0.592692
+  - - 2.555337
+    - 0.594544
+  - - 2.55723
+    - 0.229668
+  - - 3.348438
+    - 0.229668
+  - - 3.348438
+    - 0.570466
+  - - 3.246224
+    - 0.570466
+  - - 3.246224
+    - 0.592692
+  - - 3.870862
+    - 0.598249
+  - - 3.984432
+    - 0.611214
+  - - 4.077182
+    - 0.642701
+  - - 4.169931
+    - 0.698265
+  - - 4.238073
+    - 0.761239
+  - - 4.298644
+    - 0.846438
+  - - 4.336501
+    - 0.935342
+  - - 4.355429
+    - 1.033507
+  - - 4.355429
+    - 2.124431
+  - - 3.984432
+    - 2.124431
+  - - 3.984432
+    - 1.902171
+  - - 3.957933
+    - 1.900319
+  - - 3.954147
+    - 1.907728
+  - - 3.69672
+    - 1.987371
+  - - 3.395759
+    - 2.06331
+  - - 3.113725
+    - 2.117022
+  - - 2.827906
+    - 2.155918
+  - - 2.398231
+    - 2.185552
+  - - 1.319311
+    - 2.185552
+  - - 1.319311
+    - 1.818824
+  - - 2.379302
+    - 1.818824
+  - - 2.807085
+    - 1.789189
+  - - 3.045583
+    - 1.757703
+  - - 3.35033
+    - 1.702138
+  - - 3.687256
+    - 1.61879
+  - - 3.973075
+    - 1.529887
+  - - 3.973075
+    - 1.040916
+  - - 3.931433
+    - 0.987203
+  - - 3.872755
+    - 0.968681
+  - - 3.25001
+    - 0.966829
+  - - 3.25001
+    - 0.990907
+  - - 3.354116
+    - 0.990907
+  - - 3.354116
+    - 1.331705
+  - - 2.559122
+    - 1.331705
+  - - 2.559122
+    - 0.966829
+  - - 2.532623
+    - 0.964977
+  - - 2.53073
+    - 1.331705
+  - - 1.750879
+    - 1.331705
+  - - 1.750879
+    - 0.990907
+  - - 1.853092
+    - 0.990907
+  - - 1.853092
+    - 0.968681
+  - - 0.91235
+    - 0.963125
+  planner_polygon_m:
+  - - 0.933171
+    - 0.61677
+  - - 1.856878
+    - 0.611214
+  - - 1.870128
+    - 0.596396
+  - - 1.862557
+    - 0.555649
+  - - 1.766022
+    - 0.550092
+  - - 1.766022
+    - 0.250042
+  - - 2.509909
+    - 0.250042
+  - - 2.509909
+    - 0.598249
+  - - 2.523158
+    - 0.613066
+  - - 2.555337
+    - 0.614918
+  - - 2.578051
+    - 0.598249
+  - - 2.578051
+    - 0.250042
+  - - 3.327616
+    - 0.250042
+  - - 3.327616
+    - 0.550092
+  - - 3.231081
+    - 0.555649
+  - - 3.22351
+    - 0.596396
+  - - 3.23676
+    - 0.611214
+  - - 3.870862
+    - 0.618622
+  - - 3.974968
+    - 0.629735
+  - - 4.067717
+    - 0.661222
+  - - 4.154788
+    - 0.713083
+  - - 4.222931
+    - 0.776056
+  - - 4.279716
+    - 0.855699
+  - - 4.31568
+    - 0.940899
+  - - 4.334608
+    - 1.039063
+  - - 4.334608
+    - 2.104057
+  - - 4.005254
+    - 2.104057
+  - - 4.005254
+    - 1.896615
+  - - 3.992004
+    - 1.881798
+  - - 3.957933
+    - 1.879945
+  - - 3.687256
+    - 1.968849
+  - - 3.386294
+    - 2.044788
+  - - 3.102368
+    - 2.098501
+  - - 2.827906
+    - 2.135544
+  - - 2.398231
+    - 2.165178
+  - - 1.340132
+    - 2.165178
+  - - 1.340132
+    - 1.839198
+  - - 2.379302
+    - 1.839198
+  - - 2.807085
+    - 1.809563
+  - - 3.045583
+    - 1.778076
+  - - 3.359795
+    - 1.720659
+  - - 3.69672
+    - 1.637312
+  - - 3.98254
+    - 1.548408
+  - - 3.999575
+    - 1.531739
+  - - 3.993897
+    - 1.035359
+  - - 3.974968
+    - 1.000168
+  - - 3.946576
+    - 0.972386
+  - - 3.914397
+    - 0.955716
+  - - 3.872755
+    - 0.948307
+  - - 3.25001
+    - 0.946455
+  - - 3.227296
+    - 0.963125
+  - - 3.234867
+    - 1.005724
+  - - 3.333295
+    - 1.011281
+  - - 3.333295
+    - 1.311331
+  - - 2.579944
+    - 1.311331
+  - - 2.579944
+    - 0.961273
+  - - 2.566694
+    - 0.946455
+  - - 2.532623
+    - 0.944603
+  - - 2.509909
+    - 0.961273
+  - - 2.509909
+    - 1.311331
+  - - 1.7717
+    - 1.311331
+  - - 1.7717
+    - 1.011281
+  - - 1.862557
+    - 1.009429
+  - - 1.875806
+    - 0.994612
+  - - 1.868235
+    - 0.953864
+  - - 1.748986
+    - 0.944603
+  - - 0.933171
+    - 0.942751
+  planner_reference_margin_m: 0.02
+  limitations:
+  - This is the parking-sector connected component only, not yet the full-map semantic classification.
+  - Crosswalk/lane paint semantics outside this component are not yet classified.
+  - FULL_VEHICLE_FOOTPRINT collision is still disabled until physical overhang geometry is verified.

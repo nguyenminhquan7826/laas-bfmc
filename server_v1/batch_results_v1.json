@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "map_id": "map_v1",
+  "planner_id": "hybrid_astar_v1",
+  "collision_mode": "REAR_AXLE_POINT_ONLY",
+  "drivable_area": "DRIVABLE_AREA_V1_ACTIVE",
+  "slot_states": {
+    "P_B1": "OCCUPIED",
+    "P_B2": "FREE",
+    "P_T1": "UNKNOWN",
+    "P_T2": "FREE"
+  },
+  "cases": [
+    {
+      "id": "local_left",
+      "start": {
+        "x": 1.3,
+        "y": 0.7511,
+        "yaw_deg": 0.0
+      },
+      "expect_feasible": true,
+      "actual_feasible": true,
+      "selected_slot": "P_B2",
+      "elapsed_ms": 396.143,
+      "pass": true,
+      "candidates": [
+        {
+          "slot_id": "P_B2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 3.315,
+          "expansions": 4386,
+          "nodes": 24
+        },
+        {
+          "slot_id": "P_T2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 3.47,
+          "expansions": 5427,
+          "nodes": 25
+        }
+      ]
+    },
+    {
+      "id": "lower_left",
+      "start": {
+        "x": 0.3,
+        "y": 0.7,
+        "yaw_deg": 0.0
+      },
+      "expect_feasible": true,
+      "actual_feasible": true,
+      "selected_slot": "P_B2",
+      "elapsed_ms": 601.325,
+      "pass": true,
+      "candidates": [
+        {
+          "slot_id": "P_B2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 4.315,
+          "expansions": 6216,
+          "nodes": 34
+        },
+        {
+          "slot_id": "P_T2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 4.6,
+          "expansions": 8305,
+          "nodes": 34
+        }
+      ]
+    },
+    {
+      "id": "right_vertical",
+      "start": {
+        "x": 4.0,
+        "y": 1.5,
+        "yaw_deg": -90.0
+      },
+      "expect_feasible": true,
+      "actual_feasible": true,
+      "selected_slot": "P_B2",
+      "elapsed_ms": 633.502,
+      "pass": true,
+      "candidates": [
+        {
+          "slot_id": "P_B2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 3.62,
+          "expansions": 4118,
+          "nodes": 23
+        },
+        {
+          "slot_id": "P_T2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 4.035,
+          "expansions": 11657,
+          "nodes": 26
+        }
+      ]
+    },
+    {
+      "id": "lower_right",
+      "start": {
+        "x": 3.8,
+        "y": 0.75,
+        "yaw_deg": 180.0
+      },
+      "expect_feasible": true,
+      "actual_feasible": true,
+      "selected_slot": "P_B2",
+      "elapsed_ms": 283.492,
+      "pass": true,
+      "candidates": [
+        {
+          "slot_id": "P_B2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 2.515,
+          "expansions": 2990,
+          "nodes": 16
+        },
+        {
+          "slot_id": "P_T2",
+          "success": true,
+          "reason": "goal_reached",
+          "cost": 2.67,
+          "expansions": 4025,
+          "nodes": 17
+        }
+      ]
+    },
+    {
+      "id": "central_island_negative",
+      "start": {
+        "x": 1.3,
+        "y": 2.0,
+        "yaw_deg": 0.0
+      },
+      "expect_feasible": false,
+      "actual_feasible": false,
+      "selected_slot": null,
+      "elapsed_ms": 0.039,
+      "pass": true,
+      "candidates": [
+        {
+          "slot_id": "P_B2",
+          "success": false,
+          "reason": "start_outside_drivable_area",
+          "cost": null,
+          "expansions": 0,
+          "nodes": 0
+        },
+        {
+          "slot_id": "P_T2",
+          "success": false,
+          "reason": "start_outside_drivable_area",
+          "cost": null,
+          "expansions": 0,
+          "nodes": 0
+        }
+      ]
+    }
+  ]
+}

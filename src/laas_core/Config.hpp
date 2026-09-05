@@ -71,6 +71,60 @@ struct MpcConfig {
     float r_steering = 5.0f;
 };
 
+struct ParkingConfig {
+    // Parking integration is disabled until an initial map pose is measured.
+    bool enable = false;
+    bool bench_mode = true;
+
+    std::string map_id = "map_v1";
+    std::string server_host = "127.0.0.1";
+    int server_port = 5000;
+    int reconnect_period_ms = 1000;
+    int max_ndjson_line_bytes = 65536;
+
+    // Pi-side trajectory contract checks. These are integration defaults, not
+    // final real-vehicle safety thresholds.
+    float max_parking_speed_mps = 0.10f;
+    double trajectory_start_max_position_error_m = 0.20;
+    double trajectory_start_max_yaw_error_rad = 0.35;
+    double trajectory_max_point_spacing_m = 0.15;
+    double trajectory_max_yaw_step_rad = 0.40;
+    int trajectory_max_points = 5000;
+
+    // Bench-only parking occupancy source. Defaults are deliberately UNKNOWN;
+    // no slot is considered FREE unless a test explicitly configures it.
+    bool enable_bench_parking_status = false;
+    int bench_parking_status_period_ms = 200;
+    float bench_slot_confidence = 1.0f;
+    ParkingSlotState bench_p_b1 = ParkingSlotState::UNKNOWN;
+    ParkingSlotState bench_p_b2 = ParkingSlotState::UNKNOWN;
+    ParkingSlotState bench_p_t1 = ParkingSlotState::UNKNOWN;
+    ParkingSlotState bench_p_t2 = ParkingSlotState::UNKNOWN;
+
+    // Bench-only map-frame parking tracker. Its output is logged only and must
+    // not be routed to UART until the dedicated parking safety layer and real
+    // vehicle geometry are verified.
+    bool enable_bench_tracker = false;
+    double tracker_lookahead_m = 0.20;
+    int tracker_nearest_search_points = 30;
+    double tracker_max_cross_track_error_m = 0.30;
+    double tracker_cusp_position_tolerance_m = 0.06;
+    double tracker_goal_position_tolerance_m = 0.06;
+    double tracker_goal_yaw_tolerance_rad = 0.15;
+    int tracker_pose_timeout_ms = 300;
+    int telemetry_timeout_ms = 250;
+    float local_obstacle_stop_distance_m = 0.50f;
+
+    // Provisional encoder + IMU dead reckoning. It must not publish a valid
+    // map pose until the vehicle's initial rear-axle-center pose is known.
+    bool enable_pose_estimator = false;
+    bool initial_pose_valid = false;
+    double initial_x_m = 0.0;
+    double initial_y_m = 0.0;
+    double initial_yaw_rad = 0.0;
+    int pose_max_integration_dt_ms = 200;
+};
+
 struct RuntimeConfig {
     int obstacle_timeout_ms = 500;
 
@@ -104,6 +158,7 @@ struct Config {
     VehicleConfig vehicle;
     PlannerConfig planner;
     MpcConfig mpc;
+    ParkingConfig parking;
     RuntimeConfig runtime;
 };
 

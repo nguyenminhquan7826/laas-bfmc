@@ -1,0 +1,200 @@
+{
+  "type": "trajectory",
+  "version": 1,
+  "trajectory_id": 1,
+  "source_seq": 2,
+  "map_id": "map_v1",
+  "target_slot": "P_B2",
+  "reference_point": "rear_axle_center",
+  "goal_mode": "REAR_AXLE_AT_SLOT_CENTER_PROXY",
+  "cost": 3.315,
+  "expansions": 4386,
+  "input_age_ms_at_plan_start": {
+    "pose": 0.8,
+    "parking_status": 0.2
+  },
+  "validation": "PASS",
+  "prototype_warning": "OFFLINE_ONLY_FULL_VEHICLE_FOOTPRINT_NOT_VERIFIED",
+  "points": [
+    {
+      "x_m": 1.3,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 1.4,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 1.5,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 1.6,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 1.7,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 1.8,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 1.9,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.0,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.1,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.2,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.3,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.4,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.5,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.6,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.7,
+      "y_m": 0.7511,
+      "yaw_rad": 0.0,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.799588,
+      "y_m": 0.758499,
+      "yaw_rad": 0.1854106,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.896105,
+      "y_m": 0.784131,
+      "yaw_rad": 0.3708212,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.986243,
+      "y_m": 0.827116,
+      "yaw_rad": 0.5562318,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 3.066911,
+      "y_m": 0.885982,
+      "yaw_rad": 0.7416424,
+      "v_ref_mps": 0.1,
+      "direction": "FORWARD"
+    },
+    {
+      "x_m": 2.998477,
+      "y_m": 0.813254,
+      "yaw_rad": 0.927053,
+      "v_ref_mps": -0.1,
+      "direction": "REVERSE"
+    },
+    {
+      "x_m": 2.944624,
+      "y_m": 0.729157,
+      "yaw_rad": 1.1124636,
+      "v_ref_mps": -0.1,
+      "direction": "REVERSE"
+    },
+    {
+      "x_m": 2.907196,
+      "y_m": 0.636573,
+      "yaw_rad": 1.2978742,
+      "v_ref_mps": -0.1,
+      "direction": "REVERSE"
+    },
+    {
+      "x_m": 2.887478,
+      "y_m": 0.538677,
+      "yaw_rad": 1.4832848,
+      "v_ref_mps": -0.1,
+      "direction": "REVERSE"
+    },
+    {
+      "x_m": 2.886145,
+      "y_m": 0.438823,
+      "yaw_rad": 1.6686954,
+      "v_ref_mps": -0.1,
+      "direction": "REVERSE"
+    }
+  ],
+  "session": {
+    "session_id": 1,
+    "state": "TRAJECTORY_READY",
+    "reason": "trajectory_validated",
+    "transition_seq": 3,
+    "active_trajectory_id": 1,
+    "target_slot": "P_B2",
+    "last_target_slot": "P_B2",
+    "replan_count": 0,
+    "replan_pending": false,
+    "pause_reason": null
+  }
+}

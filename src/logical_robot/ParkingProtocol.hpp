@@ -19,21 +19,10 @@ enum class ParkingServerMessageType {
 struct ParkingSessionSnapshot {
     std::uint64_t session_id = 0;
     std::string state;
-    std::string reason;
-    std::uint64_t transition_seq = 0;
-
     std::uint64_t active_trajectory_id = 0;
     bool has_active_trajectory = false;
-
     std::string target_slot;
-    std::string last_target_slot;
-    bool has_last_target_slot = false;
-
     std::uint64_t replan_count = 0;
-    bool replan_pending = false;
-
-    std::string pause_reason;
-    bool has_pause_reason = false;
 };
 
 struct ParkingServerMessage {

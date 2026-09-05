@@ -4,6 +4,11 @@ from pathlib import Path
 path = Path("src/execution_control/Executive.cpp")
 text = path.read_text()
 
+# Safe to run on every branch push. Once Step-12B is integrated, do nothing.
+if "ParkingSessionSyncPolicy::evaluate(session, local)" in text:
+    print("[SKIP] Step-12B Executive integration already applied")
+    raise SystemExit(0)
+
 
 def replace_once(old: str, new: str, label: str) -> None:
     global text

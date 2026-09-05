@@ -9,6 +9,7 @@
 #include "functional/safety/ParkingTrajectoryValidator.hpp"
 #include "laas_core/Time.hpp"
 #include "logical_robot/ParkingServerClient.hpp"
+#include "logical_robot/ParkingSessionSyncPolicy.hpp"
 
 namespace {
 
@@ -16,6 +17,7 @@ using laas::Config;
 using laas::ParkingServerClient;
 using laas::ParkingServerMessage;
 using laas::ParkingServerMessageType;
+using laas::ParkingSessionSyncPolicy;
 using laas::ParkingSlotObservation;
 using laas::ParkingSlotState;
 using laas::ParkingStatusMsg;
@@ -149,7 +151,7 @@ void refreshInputs(
     CHECK_TRUE(client.sendParkingStatus(status), "refresh_parking_send_failed");
 }
 
-void assertSessionState(
+ParkingServerMessage querySession(
     ParkingServerClient& client,
     const std::string& expected_state,
     std::uint64_t expected_trajectory_id = 0)
@@ -168,6 +170,41 @@ void assertSessionState(
         CHECK_TRUE(status.session.active_trajectory_id == expected_trajectory_id,
                    "session_active_trajectory_mismatch");
     }
+    return status;
+}
+
+void assertReadySyncPolicy(
+    ParkingServerClient& client,
+    const ParkingTrajectoryMsg& local)
+{
+    const ParkingServerMessage status = querySession(
+        client, "TRAJECTORY_READY", local.trajectory_id);
+    const auto decision = ParkingSessionSyncPolicy::evaluate(
+        status.session, local);
+
+    CHECK_TRUE(decision.session_valid, "sync_ready_invalid_session");
+    CHECK_TRUE(decision.trajectory_consistent,
+               "sync_ready_trajectory_inconsistent");
+    CHECK_TRUE(!decision.hold_motion, "sync_ready_unexpected_hold");
+    CHECK_TRUE(!decision.request_replan, "sync_ready_unexpected_replan");
+}
+
+void assertPausedSyncPolicy(
+    ParkingServerClient& client,
+    const ParkingTrajectoryMsg& local)
+{
+    const ParkingServerMessage status = querySession(
+        client, "PAUSED", local.trajectory_id);
+    const auto decision = ParkingSessionSyncPolicy::evaluate(
+        status.session, local);
+
+    CHECK_TRUE(decision.session_valid, "sync_paused_invalid_session");
+    CHECK_TRUE(decision.trajectory_consistent,
+               "sync_paused_trajectory_inconsistent");
+    CHECK_TRUE(decision.hold_motion,
+               "sync_paused_policy_allowed_motion");
+    CHECK_TRUE(!decision.request_replan,
+               "sync_paused_policy_bypassed_pause");
 }
 
 ParkingTrajectoryMsg waitForValidatedTrajectory(
@@ -218,14 +255,16 @@ void runScenario(int port)
     CHECK_TRUE(client.sendTrajectoryStatus(
                    1, trajectory.trajectory_id, "RECEIVED", "CI_E2E_ACCEPT"),
                "received_status_send_failed");
-    assertSessionState(client, "TRAJECTORY_READY", trajectory.trajectory_id);
+    assertReadySyncPolicy(client, trajectory);
     std::cout << "[PASS] initial_handshake_and_pi_validation\n";
+    std::cout << "[PASS] step12_ready_session_sync_policy\n";
 
     CHECK_TRUE(client.sendSafetyEvent(
                    trajectory.trajectory_id, true, "CRITICAL_OBSTACLE"),
                "critical_obstacle_send_failed");
-    assertSessionState(client, "PAUSED", trajectory.trajectory_id);
+    assertPausedSyncPolicy(client, trajectory);
     std::cout << "[PASS] critical_obstacle_pauses_session\n";
+    std::cout << "[PASS] step12_paused_session_holds_motion\n";
 
     ++input_sequence;
     refreshInputs(client, input_sequence);
@@ -241,12 +280,13 @@ void runScenario(int port)
     CHECK_TRUE(client.sendTrajectoryStatus(
                    2, after_obstacle.trajectory_id, "RECEIVED", "CI_E2E_ACCEPT"),
                "second_received_status_send_failed");
+    assertReadySyncPolicy(client, after_obstacle);
     std::cout << "[PASS] safety_clear_replans_after_obstacle\n";
 
     CHECK_TRUE(client.sendSafetyEvent(
                    after_obstacle.trajectory_id, true, "SERVER_TIMEOUT"),
                "server_timeout_event_send_failed");
-    assertSessionState(client, "PAUSED", after_obstacle.trajectory_id);
+    assertPausedSyncPolicy(client, after_obstacle);
     std::cout << "[PASS] server_timeout_pauses_session\n";
 
     ++input_sequence;
@@ -263,6 +303,7 @@ void runScenario(int port)
     CHECK_TRUE(client.sendTrajectoryStatus(
                    3, after_timeout.trajectory_id, "RECEIVED", "CI_E2E_ACCEPT"),
                "third_received_status_send_failed");
+    assertReadySyncPolicy(client, after_timeout);
     std::cout << "[PASS] safety_clear_replans_after_timeout\n";
 
     ++input_sequence;

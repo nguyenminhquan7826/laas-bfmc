@@ -1,0 +1,64 @@
+name: Scheduler Audit Apply Once
+
+on:
+  push:
+    branches:
+      - step12-status-sync
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: step12-status-sync
+          fetch-depth: 0
+
+      - name: Apply guarded scheduler fix
+        run: python scripts/apply_scheduler_audit_fix.py
+
+      - name: Build scheduler test before commit
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Isrc \
+            server_v1/tests/test_scheduler.cpp \
+            src/execution_control/Scheduler.cpp \
+            -o /tmp/test_scheduler
+          /tmp/test_scheduler
+
+      - name: Safety assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('src/execution_control/Executive.cpp').read_text()
+          start = text.index('void Executive::run()')
+          end = text.index('void Executive::stop()', start)
+          run = text[start:end]
+          assert run.count('handleKeyboardTick();') == 1
+          assert run.count('telemetryTick();') == 1
+          assert '[SCHEDULER_AUDIT_V1]' in text
+          bench_start = text.index('void Executive::parkingBenchControlTick()')
+          bench_end = text.index('void Executive::controlTick()', bench_start)
+          bench = '\n'.join(line for line in text[bench_start:bench_end].splitlines() if not line.lstrip().startswith('//'))
+          assert 'vehicle_.send' not in bench
+          print('[PASS] scheduler fix + NO PARKING UART')
+          PY
+
+      - name: Commit scheduler audit changes if needed
+        run: |
+          git add src/execution_control/Executive.cpp \
+                  server_v1/tests/test_scheduler.cpp \
+                  .github/workflows/scheduler-audit-tests.yml
+          if git diff --cached --quiet; then
+            echo '[SKIP] scheduler audit already integrated'
+            exit 0
+          fi
+          git config user.name 'scheduler-audit-ci'
+          git config user.email 'scheduler-audit-ci@users.noreply.github.com'
+          git commit -m 'fix(scheduler): remove stale-time burst and decouple telemetry'
+          git push origin HEAD:step12-status-sync

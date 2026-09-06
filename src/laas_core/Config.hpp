@@ -24,6 +24,10 @@ struct UdpConfig {
     // Safety-critical AI traffic stays inside the Pi and does not use Wi-Fi.
     std::string local_ai_ip = "127.0.0.1";
 
+    // Bird-eye debug streaming is observational only and can be disabled
+    // independently from the local YOLO safety path.
+    bool enable_debug_stream = true;
+
     // Change this to the current IPv4 address of the monitoring laptop.
     std::string monitor_ip = "192.168.1.253";
 

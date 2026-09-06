@@ -205,19 +205,22 @@ bool UdpYoloInterface::init()
                   << udp.local_ai_ip << ":" << udp.yolo_send_port << "\n";
         return false;
     }
-    if (!makeAddress(udp.monitor_ip, udp.debug_send_port, impl_->debug_address)) {
+    if (udp.enable_debug_stream &&
+        !makeAddress(udp.monitor_ip, udp.debug_send_port, impl_->debug_address)) {
         std::cerr << "[UDP-YOLO] Invalid monitor address: "
                   << udp.monitor_ip << ":" << udp.debug_send_port << "\n";
         return false;
     }
 
     impl_->yolo_send_sock = makeSendSocket();
-    impl_->debug_send_sock = makeSendSocket();
+    if (udp.enable_debug_stream) {
+        impl_->debug_send_sock = makeSendSocket();
+    }
     impl_->distance_recv_sock = makeReceiveSocket(
         udp.local_ai_ip, udp.distance_recv_port, 1000);
 
     if (impl_->yolo_send_sock < 0 ||
-        impl_->debug_send_sock < 0 ||
+        (udp.enable_debug_stream && impl_->debug_send_sock < 0) ||
         impl_->distance_recv_sock < 0) {
         std::cerr << "[UDP-YOLO] Socket init failed: " << std::strerror(errno) << "\n";
         close();
@@ -228,9 +231,14 @@ bool UdpYoloInterface::init()
     std::cout << "[UDP-YOLO] Raw frame -> "
               << udp.local_ai_ip << ":" << udp.yolo_send_port
               << ", distance <- " << udp.local_ai_ip << ":"
-              << udp.distance_recv_port
-              << ", bird-eye -> " << udp.monitor_ip << ":"
-              << udp.debug_send_port << "\n";
+              << udp.distance_recv_port;
+    if (udp.enable_debug_stream) {
+        std::cout << ", bird-eye -> " << udp.monitor_ip << ":"
+                  << udp.debug_send_port;
+    } else {
+        std::cout << ", bird-eye=OFF";
+    }
+    std::cout << "\n";
     return true;
 }
 
@@ -253,6 +261,9 @@ bool UdpYoloInterface::sendDebugFrame(const cv::Mat& frame, int quality)
 {
     if (!impl_->config.runtime.enable_yolo_udp || !impl_->initialized) {
         return false;
+    }
+    if (!impl_->config.udp.enable_debug_stream) {
+        return true;
     }
 
     const std::uint64_t now = nowMs();

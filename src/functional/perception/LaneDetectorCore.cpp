@@ -23,6 +23,24 @@ LaneDetectorCore::LaneDetectorCore(int width,
     expected_lane_width_px_ = 350.0f *
                               static_cast<float>(width) / 640.0f;
     lane_width_px_ = expected_lane_width_px_;
+
+    // Source/destination geometry is constant for a configured detector, so
+    // compute the homography once instead of rebuilding it for every frame.
+    const float margin_x = 150.0f *
+                           static_cast<float>(width) / 640.0f;
+    const std::vector<cv::Point2f> src_points = {
+        {235.0f, 285.0f},
+        {405.0f, 285.0f},
+        {560.0f, 470.0f},
+        { 95.0f, 470.0f}
+    };
+    const std::vector<cv::Point2f> dst_points = {
+        {margin_x, 0.0f},
+        {width - margin_x, 0.0f},
+        {width - margin_x, height - 1.0f},
+        {margin_x, height - 1.0f}
+    };
+    ipm_matrix_ = cv::getPerspectiveTransform(src_points, dst_points);
 }
 
 void LaneDetectorCore::resetTracking()
@@ -39,7 +57,7 @@ void LaneDetectorCore::resetTracking()
 }
 
 #if 1
-void LaneDetectorCore::processFrame(cv::Mat& frame_resize) {
+void LaneDetectorCore::processFrame(const cv::Mat& frame_resize) {
     bird_eye_view = applyIPM(frame_resize);
     mask = processMask(bird_eye_view);
 
@@ -321,98 +339,22 @@ float LaneDetectorCore::getLaneWidthPx() {
 cv::Mat LaneDetectorCore::applyIPM(const cv::Mat& frame)
 {
     if (frame.empty()) {
-        bird_eye_view = cv::Mat::zeros(height, width, CV_8UC3);
-        return bird_eye_view;
+        return cv::Mat::zeros(height, width, CV_8UC3);
     }
-
-    // =====================================================
-    // SOURCE POINTS
-    // =====================================================
-    cv::Point2f tl(235.0f, 285.0f);
-    cv::Point2f tr(405.0f, 285.0f);
-    cv::Point2f br(560.0f, 470.0f);
-    cv::Point2f bl( 95.0f, 470.0f);
-
-    std::vector<cv::Point2f> src_points = { tl, tr, br, bl };
-
-    // =====================================================
-    // DESTINATION POINTS
-    // =====================================================
-    // Preserve the destination geometry used by the legacy implementation.
-    // Scale the 150 px margin only when an output width other than 640 is used.
-    const float margin_x = 150.0f *
-                           static_cast<float>(width) / 640.0f;
-
-    cv::Point2f dst_tl(margin_x, 0.0f);
-    cv::Point2f dst_tr(width - margin_x, 0.0f);
-    cv::Point2f dst_br(width - margin_x, height - 1.0f);
-    cv::Point2f dst_bl(margin_x, height - 1.0f);
-
-    std::vector<cv::Point2f> dst_points = { dst_tl, dst_tr, dst_br, dst_bl };
-
-    // tính ma trân  homography
-    cv::Mat M = cv::getPerspectiveTransform(src_points, dst_points);
 
     cv::Mat warped;
     cv::warpPerspective(
         frame,
         warped,
-        M,
+        ipm_matrix_,
         cv::Size(width, height),
         cv::INTER_LINEAR,
         cv::BORDER_CONSTANT,
-        cv::Scalar(0, 0, 0)
-    );
+        cv::Scalar(0, 0, 0));
 
-    // TEMP A/B TEST:
-    // Giữ nguyên hệ tọa độ 640x480 sau warpPerspective.
-    // Không crop + stretch về 640 trong bài test này.
-    bird_eye_view = warped.clone();
-    return bird_eye_view;
-
-    // =====================================================
-    // CROP THE VALID IPM AREA, THEN RESIZE BEFORE LANE DRAWING
-    // =====================================================
-    // The old LaneDetector removed the black warp border here.  Performing
-    // this step inside applyIPM() is important: processMask(), polynomial
-    // fitting and all debug drawing then operate in the final 640x480
-    // coordinate system, so the coloured lines are not enlarged afterwards.
-    // Because the destination quadrilateral is a rectangle, its valid
-    // horizontal limits are known exactly.  A fixed ROI produces the same
-    // black-border removal as the old auto-crop without frame-to-frame scale
-    // jitter when the road happens to be dark.
-    const int pad_x = std::max(
-        1,
-        static_cast<int>(std::lround(5.0 * width / 640.0))
-    );
-    const int crop_left = std::min(
-        std::max(static_cast<int>(std::lround(margin_x)) + pad_x, 0),
-        warped.cols - 1
-    );
-    const int crop_right = std::min(
-        std::max(static_cast<int>(std::lround(width - margin_x)) - pad_x,
-                 crop_left + 1),
-        warped.cols
-    );
-    const int crop_width = crop_right - crop_left;
-
-    if (crop_width > 50 && warped.rows > 50) {
-        const cv::Rect roi(crop_left, 0, crop_width, warped.rows);
-        const cv::Mat cropped = warped(roi);
-        cv::resize(
-            cropped,
-            bird_eye_view,
-            cv::Size(width, height),
-            0.0,
-            0.0,
-            cv::INTER_LINEAR
-        );
-        return bird_eye_view;
-    }
-
-    // Safe fallback if the valid region cannot be determined.
-    bird_eye_view = warped.clone();
-    return bird_eye_view;
+    // Preserve the currently validated A/B geometry: use the full warped
+    // 640x480 image without the legacy crop/stretch stage.
+    return warped;
 }
 
 void LaneDetectorCore::slidingWindow(const cv::Mat& mask,

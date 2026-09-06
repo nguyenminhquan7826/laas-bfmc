@@ -15,7 +15,7 @@ public:
                      float bev_forward_range_m = 2.0f);
     ~LaneDetectorCore() = default;
 
-    void processFrame(cv::Mat& frame_resize);
+    void processFrame(const cv::Mat& frame_resize);
 
     cv::Mat getMask() const { return mask; }
     cv::Mat getBirdEyeView() const { return bird_eye_view; }
@@ -47,6 +47,7 @@ private:
     std::vector<cv::Point> centerline;
     cv::Mat bird_eye_view;
     cv::Mat mask;
+    cv::Mat ipm_matrix_;
     bool has_valid_lane_ = false;
 
     cv::Vec3f left_coeffs_{0.0f, 0.0f, 0.0f};

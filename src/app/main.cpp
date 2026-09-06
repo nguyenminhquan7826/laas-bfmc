@@ -61,6 +61,16 @@ int main(int argc, char* argv[])
             bench_yolo_env && std::string(bench_yolo_env) == "1";
         config.runtime.enable_yolo_udp = bench_yolo_enabled;
 
+        // Bird-eye monitor traffic is not safety-critical and adds JPEG encode
+        // work to perception. Keep it OFF for bench/load tests unless explicitly
+        // requested. This never changes the UART safety gate above.
+        const char* bench_debug_env =
+            std::getenv("LAAS_PARKING_BENCH_DEBUG");
+        const bool bench_debug_enabled =
+            bench_yolo_enabled && bench_debug_env &&
+            std::string(bench_debug_env) == "1";
+        config.udp.enable_debug_stream = bench_debug_enabled;
+
         config.parking.enable = true;
         config.parking.bench_mode = true;
 
@@ -112,6 +122,7 @@ int main(int argc, char* argv[])
             << "[APP][PARKING_BENCH]"
             << " UART=OFF"
             << " YOLO=" << (bench_yolo_enabled ? "ON" : "OFF")
+            << " DEBUG=" << (bench_debug_enabled ? "ON" : "OFF")
             << " server="
             << config.parking.server_host
             << ":"

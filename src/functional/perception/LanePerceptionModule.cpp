@@ -25,11 +25,13 @@ bool LanePerceptionModule::process(const FrameMsg& input, LanePerceptionMsg& out
         return false;
     }
 
-    cv::Mat frame = input.frame_bgr.clone();
-    detector_.processFrame(frame);
+    detector_.processFrame(input.frame_bgr);
 
-    output.bird_eye_view = detector_.getBirdEyeView().clone();
-    output.mask = detector_.getMask().clone();
+    // cv::Mat copies are reference-counted. Detector processing allocates new
+    // result buffers on the next frame, so these immutable snapshots do not
+    // need full-frame clones here.
+    output.bird_eye_view = detector_.getBirdEyeView();
+    output.mask = detector_.getMask();
     output.centerline = detector_.getCenterline();
 
     output.left_coeffs = detector_.getLeftCoeffs();

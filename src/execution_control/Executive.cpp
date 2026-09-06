@@ -541,7 +541,9 @@ void Executive::perceptionTick()
     LanePerceptionMsg lane;
     if (lane_perception_.process(frame, lane)) {
         blackboard_.setLane(lane);
-        if (config_.runtime.enable_yolo_udp && !lane.bird_eye_view.empty()) {
+        if (config_.runtime.enable_yolo_udp &&
+            config_.udp.enable_debug_stream &&
+            !lane.bird_eye_view.empty()) {
             yolo_.sendDebugFrame(lane.bird_eye_view, 80);
         }
     }
@@ -1305,6 +1307,9 @@ void Executive::loggingTick() const
               << " yoloLateMs=" << sd.yolo.last_lateness_ms
               << " yoloMissed=" << sd.yolo.missed_periods
               << " perceptionExecUs=" << sd.perception.last_exec_us
+              << " perceptionMaxExecUs=" << sd.perception.max_exec_us
+              << " perceptionLateMs=" << sd.perception.last_lateness_ms
+              << " perceptionMissed=" << sd.perception.missed_periods
               << " planningExecUs=" << sd.planning.last_exec_us
               << " decisionExecUs=" << sd.decision.last_exec_us
               << "\n";

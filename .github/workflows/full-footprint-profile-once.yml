@@ -1,0 +1,53 @@
+name: Full Footprint Profile Once
+
+on:
+  push:
+    branches:
+      - step12-status-sync
+    paths:
+      - .github/workflows/full-footprint-profile-once.yml
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server_v1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install PyYAML
+      - name: Profile P_B2 plan
+        run: |
+          python - <<'PY'
+          import math, time
+          from pathlib import Path
+          from hybrid_astar_v1 import HybridAStarPlanner, Pose, build_slot_obstacles, load_yaml
+          from slot_selector_v1 import rear_axle_goal_for_slot
+
+          root = Path('.')
+          map_cfg = load_yaml(root / 'map_v1.yaml')
+          vehicle_cfg = load_yaml(root / 'vehicle_v1.yaml')
+          planner_cfg = load_yaml(root / 'planner_v1.yaml')
+          t0 = time.perf_counter()
+          planner = HybridAStarPlanner(map_cfg, vehicle_cfg, planner_cfg)
+          t1 = time.perf_counter()
+          states = {'P_B1':'OCCUPIED','P_B2':'FREE','P_T1':'OCCUPIED','P_T2':'OCCUPIED'}
+          slot = next(s for s in map_cfg['slots'] if s['id'] == 'P_B2')
+          goal, body, mode = rear_axle_goal_for_slot(slot, vehicle_cfg)
+          start = Pose(1.300, 0.751, 0.0)
+          obstacles = build_slot_obstacles(map_cfg, states, target_slot='P_B2')
+          print(f'[PROFILE] init_ms={(t1-t0)*1000:.2f}')
+          print(f'[PROFILE] start=({start.x:.3f},{start.y:.3f},{math.degrees(start.yaw):.1f}deg)')
+          print(f'[PROFILE] goal_rear=({goal.x:.3f},{goal.y:.3f},{math.degrees(goal.yaw):.1f}deg) body=({body.x:.3f},{body.y:.3f}) mode={mode}')
+          print(f'[PROFILE] start_collision={planner.pose_collision(start, obstacles)} goal_collision={planner.pose_collision(goal, obstacles)}')
+          t2 = time.perf_counter()
+          result = planner.plan(start, goal, obstacles)
+          t3 = time.perf_counter()
+          print(f'[PROFILE] plan_ms={(t3-t2)*1000:.2f} success={result.success} reason={result.reason} expansions={result.expansions} nodes={len(result.path)} cost={result.cost}')
+          PY

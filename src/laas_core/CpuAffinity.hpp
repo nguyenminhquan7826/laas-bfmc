@@ -104,10 +104,9 @@ inline std::string formatCpuSet(const cpu_set_t& set)
 }
 #endif
 
-// Main-process affinity is deliberately OFF by default. Pi measurements showed
-// that pinning the entire cooperative Executive (camera + perception + control)
-// to one CPU increases control jitter. LAAS_MAIN_CPU=<index> remains available
-// as an explicit benchmark/diagnostic override.
+// Measured Pi 5 default: leave laas_pp unrestricted. Whole-process pinning
+// reduced control/vision performance after the control-thread split.
+// LAAS_MAIN_CPU=<index> remains only for explicit diagnostics/benchmarks.
 inline bool configureMainCpuAffinity()
 {
     const char* env = std::getenv("LAAS_MAIN_CPU");

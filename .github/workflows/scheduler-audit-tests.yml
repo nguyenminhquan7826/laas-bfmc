@@ -63,28 +63,38 @@ jobs:
           assert run.count('handleKeyboardTick();') == 1
           assert 'telemetryTick();' not in run
           assert 'runPeriodicTask(scheduler_.control' not in run
+          assert 'runPeriodicTask(scheduler_.camera' not in run
           assert '[SCHEDULER_AUDIT_V1]' in text
           assert '[SCHEDULER_JITTER_MONITOR_V1]' in text
           assert '[CONTROL_THREAD_SPLIT_V1]' in text
+          assert '[CAMERA_THREAD_SPLIT_V1]' in text
 
-          for task in ('camera', 'yolo', 'perception', 'decision', 'planning', 'logging'):
+          for task in ('yolo', 'perception', 'decision', 'planning', 'logging'):
               needle = f'runPeriodicTask(scheduler_.{task}, scheduler_diagnostics_.{task}'
               assert needle in run, f'missing diagnostics for {task}'
 
-          worker_start = text.index('void Executive::controlWorkerLoop()')
-          worker_end = text.index('void Executive::setUserRunRequest', worker_start)
-          worker = text[worker_start:worker_end]
-          assert 'runPeriodicTask(' in worker and 'scheduler_.control' in worker
-          assert 'telemetryTick();' in worker
-          assert worker.index('parkingNetworkTick();') < worker.index('controlTick();') < worker.index('parkingBenchControlTick();')
-          assert 'control_state_mutex_' in worker
-          assert 'scheduler_diagnostics_.control = local_control_diagnostics' in worker
+          camera_start = text.index('void Executive::cameraWorkerLoop()')
+          camera_end = text.index('void Executive::joinControlWorker()', camera_start)
+          camera_worker = text[camera_start:camera_end]
+          assert 'scheduler_.camera' in camera_worker
+          assert 'cameraTick();' in camera_worker
+          assert 'scheduler_diagnostics_.camera = local_camera_diagnostics' in camera_worker
+          assert 'joinCameraWorker();' in run
+
+          control_start = text.index('void Executive::controlWorkerLoop()')
+          control_end = text.index('void Executive::setUserRunRequest', control_start)
+          control_worker = text[control_start:control_end]
+          assert 'scheduler_.control' in control_worker
+          assert 'telemetryTick();' in control_worker
+          assert control_worker.index('parkingNetworkTick();') < control_worker.index('controlTick();') < control_worker.index('parkingBenchControlTick();')
+          assert 'control_state_mutex_' in control_worker
+          assert 'scheduler_diagnostics_.control = local_control_diagnostics' in control_worker
 
           assert '"[SCHED]"' in text
           assert 'controlThread=1' in text
+          assert 'cameraThread=1' in text
           assert 'controlMissed=' in text
           assert 'controlMaxLateMs=' in text
-          assert 'joinControlWorker();' in text
           assert 'if (!user_run_request_.load())' in text
 
           logging_start = text.index('void Executive::loggingTick() const')
@@ -100,6 +110,12 @@ jobs:
           )
           assert 'vehicle_.send' not in bench, 'parking bench must remain NO UART'
           assert 'constexpr bool kActuationAuthorized = false;' in text
+
+          camera = Path('src/logical_robot/CameraInterface.cpp').read_text()
+          assert 'initUndistortRectifyMap' in camera
+          assert 'cv::remap' in camera
+          assert 'cv::imwrite' not in camera
+          assert 'appsink max-buffers=1 drop=true sync=false' in camera
 
           main = Path('src/app/main.cpp').read_text()
           ai_launcher = Path('ai/run_ai_affinity.py').read_text()
@@ -123,5 +139,5 @@ jobs:
           assert 'options.intra_op_num_threads = 2' in ai_detector
           assert 'options.inter_op_num_threads = 1' in ai_detector
 
-          print('[PASS] threaded control + measured CPU policy + safe bench YOLO + NO PARKING UART')
+          print('[PASS] independent camera/control workers + cached remap + safe bench invariants')
           PY

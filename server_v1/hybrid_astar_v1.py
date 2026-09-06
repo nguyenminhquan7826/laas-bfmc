@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import bisect
 import heapq
 import json
 import math
@@ -171,6 +172,7 @@ class HybridAStarPlanner:
         self._drivable_blocked_prefix: Optional[List[int]] = None
         self._drivable_prefix_grid_id: Optional[int] = None
         self._drivable_prefix_stride: int = 0
+        self._blocked_cells_by_row: Optional[List[List[int]]] = None
         semantic = map_cfg.get("semantic_map", {})
         grid_file = semantic.get("drivable_grid_file")
         if grid_file:
@@ -296,6 +298,15 @@ class HybridAStarPlanner:
         )
 
     @staticmethod
+    def _footprint_aabb_from_obb(
+        obb: Tuple[float, float, float, float, float, float, float, float]
+    ) -> Tuple[float, float, float, float]:
+        cx, cy, ux, uy, vx, vy, half_l, half_w = obb
+        half_x = half_l * abs(ux) + half_w * abs(vx)
+        half_y = half_l * abs(uy) + half_w * abs(vy)
+        return cx - half_x, cx + half_x, cy - half_y, cy + half_y
+
+    @staticmethod
     def _obb_intersects_aabb(
         obb: Tuple[float, float, float, float, float, float, float, float],
         x_min: float,
@@ -341,6 +352,7 @@ class HybridAStarPlanner:
             self._drivable_blocked_prefix = None
             self._drivable_prefix_grid_id = None
             self._drivable_prefix_stride = 0
+            self._blocked_cells_by_row = None
             return
 
         grid_id = id(grid)
@@ -352,18 +364,22 @@ class HybridAStarPlanner:
 
         stride = grid.width_cells + 1
         prefix = [0] * ((grid.height_cells + 1) * stride)
+        blocked_cells_by_row: List[List[int]] = [[] for _ in range(grid.height_cells)]
         for iy in range(grid.height_cells):
             row_blocked = 0
+            blocked_row = blocked_cells_by_row[iy]
             prev_base = iy * stride
             base = (iy + 1) * stride
             for ix in range(grid.width_cells):
                 if not grid.is_cell_drivable(ix, iy):
                     row_blocked += 1
+                    blocked_row.append(ix)
                 prefix[base + ix + 1] = prefix[prev_base + ix + 1] + row_blocked
 
         self._drivable_blocked_prefix = prefix
         self._drivable_prefix_grid_id = grid_id
         self._drivable_prefix_stride = stride
+        self._blocked_cells_by_row = blocked_cells_by_row
 
     def _blocked_count_in_rect(self, ix0: int, iy0: int, ix1: int, iy1: int) -> int:
         self._ensure_drivable_blocked_prefix()
@@ -391,13 +407,17 @@ class HybridAStarPlanner:
             + prefix[y0 * stride + x0]
         )
 
-    def footprint_in_drivable_area(self, pose: Pose) -> bool:
-        obb = self._footprint_obb(pose)
-        corners = self.footprint_corners(pose)
-        min_x = min(x for x, _ in corners)
-        max_x = max(x for x, _ in corners)
-        min_y = min(y for _, y in corners)
-        max_y = max(y for _, y in corners)
+    def footprint_in_drivable_area(
+        self,
+        pose: Pose,
+        obb: Optional[Tuple[float, float, float, float, float, float, float, float]] = None,
+        aabb: Optional[Tuple[float, float, float, float]] = None,
+    ) -> bool:
+        if obb is None:
+            obb = self._footprint_obb(pose)
+        if aabb is None:
+            aabb = self._footprint_aabb_from_obb(obb)
+        min_x, max_x, min_y, max_y = aabb
 
         if min_x < 0.0 or max_x > self.map_width or min_y < 0.0 or max_y > self.map_height:
             return False
@@ -411,44 +431,55 @@ class HybridAStarPlanner:
         iy0 = max(0, int(math.floor(min_y / grid.resolution_m)))
         iy1 = min(grid.height_cells - 1, int(math.floor(max_y / grid.resolution_m)))
 
-        # Exact fail-safe broad phase: if the footprint AABB contains no blocked
-        # CAD cells, the OBB cannot intersect a blocked cell. This removes the
-        # expensive Python cell scan for the common all-drivable case without
-        # relaxing collision semantics.
         if self._blocked_count_in_rect(ix0, iy0, ix1, iy1) == 0:
             return True
 
+        blocked_rows = self._blocked_cells_by_row
+        if blocked_rows is None:
+            raise RuntimeError('blocked-cell row cache missing')
+
         for iy in range(iy0, iy1 + 1):
-            for ix in range(ix0, ix1 + 1):
-                if grid.is_cell_drivable(ix, iy):
-                    continue
+            blocked_row = blocked_rows[iy]
+            left = bisect.bisect_left(blocked_row, ix0)
+            right = bisect.bisect_right(blocked_row, ix1)
+            for ix in blocked_row[left:right]:
                 x_min, x_max, y_min, y_max = grid.cell_bounds(ix, iy)
                 if self._obb_intersects_aabb(obb, x_min, x_max, y_min, y_max):
                     return False
         return True
 
     def footprint_hits_slot_obstacle(
-        self, pose: Pose, obstacles: Sequence[RectObstacle]
+        self,
+        pose: Pose,
+        obstacles: Sequence[RectObstacle],
+        obb: Optional[Tuple[float, float, float, float, float, float, float, float]] = None,
+        aabb: Optional[Tuple[float, float, float, float]] = None,
     ) -> bool:
-        obb = self._footprint_obb(pose)
+        if obb is None:
+            obb = self._footprint_obb(pose)
+        if aabb is None:
+            aabb = self._footprint_aabb_from_obb(obb)
+        min_x, max_x, min_y, max_y = aabb
         m = self.obstacle_inflation
         for obs in obstacles:
-            if self._obb_intersects_aabb(
-                obb,
-                obs.x_min - m,
-                obs.x_max + m,
-                obs.y_min - m,
-                obs.y_max + m,
-            ):
+            ox0 = obs.x_min - m
+            ox1 = obs.x_max + m
+            oy0 = obs.y_min - m
+            oy1 = obs.y_max + m
+            if max_x < ox0 or min_x > ox1 or max_y < oy0 or min_y > oy1:
+                continue
+            if self._obb_intersects_aabb(obb, ox0, ox1, oy0, oy1):
                 return True
         return False
 
     def pose_collision(self, pose: Pose, obstacles: Sequence[RectObstacle]) -> bool:
         if self.collision_mode == self.POINT_COLLISION_MODE:
             return self.point_collision(pose.x, pose.y, obstacles)
-        if not self.footprint_in_drivable_area(pose):
+        obb = self._footprint_obb(pose)
+        aabb = self._footprint_aabb_from_obb(obb)
+        if not self.footprint_in_drivable_area(pose, obb=obb, aabb=aabb):
             return True
-        return self.footprint_hits_slot_obstacle(pose, obstacles)
+        return self.footprint_hits_slot_obstacle(pose, obstacles, obb=obb, aabb=aabb)
 
     def simulate_primitive(
         self,
@@ -458,15 +489,14 @@ class HybridAStarPlanner:
         obstacles: Sequence[RectObstacle],
     ) -> Optional[Pose]:
         x, y, yaw = node.x, node.y, node.yaw
+        curvature = math.tan(steer_rad) / self.wheelbase
         remaining = self.motion_step
         while remaining > 1e-9:
             ds = min(self.integration_step, remaining)
             signed_ds = direction * ds
             x += signed_ds * math.cos(yaw)
             y += signed_ds * math.sin(yaw)
-            yaw = self.normalize_angle(
-                yaw + signed_ds / self.wheelbase * math.tan(steer_rad)
-            )
+            yaw = self.normalize_angle(yaw + signed_ds * curvature)
             if self.pose_collision(Pose(x, y, yaw), obstacles):
                 return None
             remaining -= ds

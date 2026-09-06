@@ -91,6 +91,17 @@ jobs:
       - name: Run Step 12 trajectory status policy test
         run: /tmp/test_parking_trajectory_status_policy
 
+      - name: Build reconnect safety event sync policy test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Iserver_v1/tests/cpp_stubs \
+            -Isrc \
+            server_v1/tests/test_parking_safety_event_sync_policy.cpp \
+            -o /tmp/test_parking_safety_event_sync_policy
+
+      - name: Run reconnect safety event sync policy test
+        run: /tmp/test_parking_safety_event_sync_policy
+
   full-app-build:
     runs-on: ubuntu-latest
 

@@ -4,6 +4,16 @@ from pathlib import Path
 p = Path("src/execution_control/Executive.cpp")
 s = p.read_text()
 
+# Repair the first integration if Python interpreted \n inside the generated
+# C++ string literal as a physical newline. This path is intentionally narrow.
+malformed_log_newline = '              << "\n";'
+fixed_log_newline = '              << "\\n";'
+if malformed_log_newline in s:
+    s = s.replace(malformed_log_newline, fixed_log_newline, 1)
+    p.write_text(s)
+    print("[PASS] repaired scheduler log newline escape")
+    raise SystemExit(0)
+
 if "[SCHEDULER_JITTER_MONITOR_V1]" in s:
     print("[SKIP] scheduler jitter monitor already integrated")
     raise SystemExit(0)
@@ -144,7 +154,7 @@ sched_log = '''    const SchedulerDiagnostics& sd = scheduler_diagnostics_;
               << " perceptionExecUs=" << sd.perception.last_exec_us
               << " planningExecUs=" << sd.planning.last_exec_us
               << " decisionExecUs=" << sd.decision.last_exec_us
-              << "\n";
+              << "\\n";
 
     std::cout   << "[EXEC] "
 '''

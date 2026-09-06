@@ -1,7 +1,6 @@
 #include "CameraInterface.hpp"
 
 #include <iostream>
-#include <stdexcept>
 
 #include "../laas_core/Time.hpp"
 
@@ -33,8 +32,18 @@ CameraInterface::~CameraInterface()
 
 bool CameraInterface::init()
 {
-    initialized_ = openCameraDevice();
-    return initialized_;
+    if (!openCameraDevice()) {
+        return false;
+    }
+
+    if (!prepareUndistortMaps()) {
+        std::cerr << "[CAMERA] Failed to prepare undistort maps.\n";
+        close();
+        return false;
+    }
+
+    initialized_ = true;
+    return true;
 }
 
 bool CameraInterface::openCameraDevice()
@@ -74,6 +83,8 @@ bool CameraInterface::openCameraDevice()
 
     if (device == "libcamera" || device == "csi") {
         // This exact NV12 caps negotiation was verified with OV5647 on Pi 5.
+        // max-buffers=1 + drop=true keeps only the newest sample; the capture
+        // path therefore never builds a latency-producing frame backlog.
         const std::string libcamera_pipeline =
             "libcamerasrc ! "
             "video/x-raw,format=NV12,width=" + std::to_string(capture_width) +
@@ -99,11 +110,62 @@ bool CameraInterface::openCameraDevice()
     return true;
 }
 
+bool CameraInterface::prepareUndistortMaps()
+{
+    const cv::Size image_size(config_.camera.width, config_.camera.height);
+    if (image_size.width <= 0 || image_size.height <= 0) {
+        return false;
+    }
+
+    // Calibration for the installed camera at 640x480.
+    const cv::Mat camera_matrix = (cv::Mat_<double>(3, 3) <<
+        262.08953333143063, 0.0, 330.77574325128484,
+        0.0, 263.57901348164575, 250.50298224489268,
+        0.0, 0.0, 1.0);
+
+    const cv::Mat distortion = (cv::Mat_<double>(1, 5) <<
+        -0.27166331922859776, 0.09924985737514846,
+        -0.0002707688044880526, 0.0006724194580262318,
+        -0.01935517123682299);
+
+    const cv::Mat new_camera_matrix = cv::getOptimalNewCameraMatrix(
+        camera_matrix,
+        distortion,
+        image_size,
+        0.0,
+        image_size,
+        &undistort_valid_roi_);
+
+    cv::initUndistortRectifyMap(
+        camera_matrix,
+        distortion,
+        cv::Mat(),
+        new_camera_matrix,
+        image_size,
+        CV_16SC2,
+        undistort_map1_,
+        undistort_map2_);
+
+    if (undistort_map1_.empty() || undistort_map2_.empty()) {
+        return false;
+    }
+
+    if (undistort_valid_roi_.width <= 0 ||
+        undistort_valid_roi_.height <= 0) {
+        undistort_valid_roi_ = cv::Rect(0, 0, image_size.width, image_size.height);
+    }
+
+    undistort_ready_ = true;
+    std::cout << "[CAMERA] Undistort maps cached for "
+              << image_size.width << "x" << image_size.height << "\n";
+    return true;
+}
+
 bool CameraInterface::grab(FrameMsg& output)
 {
     output = FrameMsg{};
 
-    if (!initialized_ || !cap_.isOpened()) {
+    if (!initialized_ || !cap_.isOpened() || !undistort_ready_) {
         return false;
     }
 
@@ -113,20 +175,9 @@ bool CameraInterface::grab(FrameMsg& output)
         return false;
     }
 
-    // Camera warm-up:
-    // Không lưu frame đầu tiên vì AE/AWB của libcamera
-    // có thể chưa ổn định. Ở 30 FPS, frame 60 ~ 2 giây.
-    if (saved_raw_count_ < 60) {
-        ++saved_raw_count_;
-
-        if (saved_raw_count_ == 60) {
-            cv::imwrite("pi_raw.jpg", raw);
-            std::cout
-                << "[CAMERA] Saved pi_raw.jpg after warm-up (frame 60)"
-                << std::endl;
-        }
-    }
-
+    // Automatic diagnostic image writes used to run here at frame 60. Disk I/O
+    // does not belong on the production capture path; calibration snapshots
+    // should be taken by a dedicated diagnostic tool instead.
     output.frame_bgr = undistortAndResize(raw);
     output.header.timestamp_ms = nowMs();
     output.header.valid = !output.frame_bgr.empty();
@@ -135,43 +186,43 @@ bool CameraInterface::grab(FrameMsg& output)
 
 cv::Mat CameraInterface::undistortAndResize(const cv::Mat& input) const
 {
-    if (input.empty()) {
+    if (input.empty() || !undistort_ready_) {
         return cv::Mat{};
     }
 
-    // These values must belong to the installed camera at 640x480.
-    cv::Mat camera_matrix = (cv::Mat_<double>(3, 3) <<
-        262.08953333143063, 0.0, 330.77574325128484,
-        0.0, 263.57901348164575, 250.50298224489268,
-        0.0, 0.0, 1.0);
+    const cv::Size target_size(config_.camera.width, config_.camera.height);
 
-    cv::Mat distortion = (cv::Mat_<double>(1, 5) <<
-        -0.27166331922859776, 0.09924985737514846,
-        -0.0002707688044880526, 0.0006724194580262318,
-        -0.01935517123682299);
-
-    cv::Rect valid_roi;
-    const cv::Mat new_camera_matrix = cv::getOptimalNewCameraMatrix(
-        camera_matrix,
-        distortion,
-        input.size(),
-        0.0,
-        input.size(),
-        &valid_roi);
+    cv::Mat source;
+    if (input.size() == target_size) {
+        source = input;
+    } else {
+        cv::resize(input, source, target_size);
+    }
 
     cv::Mat undistorted;
-    cv::undistort(
-        input, undistorted, camera_matrix, distortion, new_camera_matrix);
+    cv::remap(
+        source,
+        undistorted,
+        undistort_map1_,
+        undistort_map2_,
+        cv::INTER_LINEAR,
+        cv::BORDER_CONSTANT);
 
-    if (valid_roi.width > 0 && valid_roi.height > 0) {
-        undistorted = undistorted(valid_roi).clone();
+    cv::Mat cropped;
+    const cv::Rect frame_rect(0, 0, undistorted.cols, undistorted.rows);
+    const cv::Rect roi = undistort_valid_roi_ & frame_rect;
+    if (roi.width > 0 && roi.height > 0) {
+        cropped = undistorted(roi);
+    } else {
+        cropped = undistorted;
+    }
+
+    if (cropped.size() == target_size) {
+        return cropped.clone();
     }
 
     cv::Mat resized;
-    cv::resize(
-        undistorted,
-        resized,
-        cv::Size(config_.camera.width, config_.camera.height));
+    cv::resize(cropped, resized, target_size);
     return resized;
 }
 
@@ -185,6 +236,9 @@ void CameraInterface::close()
     if (cap_.isOpened()) {
         cap_.release();
     }
+    undistort_map1_.release();
+    undistort_map2_.release();
+    undistort_ready_ = false;
     initialized_ = false;
 }
 

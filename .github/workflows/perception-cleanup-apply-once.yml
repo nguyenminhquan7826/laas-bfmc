@@ -22,7 +22,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply perception cleanup
-        run: python scripts/apply_perception_cleanup.py
+        run: |
+          python scripts/apply_perception_cleanup.py
+          git restore .github/workflows/scheduler-audit-tests.yml
 
       - name: Verify expected diff
         run: |
@@ -48,7 +50,6 @@ jobs:
             src/functional/perception/LaneDetectorCore.hpp \
             src/functional/perception/LaneDetectorCore.cpp \
             src/functional/perception/LanePerceptionModule.cpp \
-            src/execution_control/Executive.cpp \
-            .github/workflows/scheduler-audit-tests.yml
+            src/execution_control/Executive.cpp
           git commit -m 'perf(perception): remove bench debug overhead and cache IPM'
           git push origin HEAD:step12-status-sync

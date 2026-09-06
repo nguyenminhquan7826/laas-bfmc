@@ -767,6 +767,13 @@ void Executive::parkingNetworkTick()
         std::cout << "[PARKING][SYNC] connected -> HOLD awaiting session\n";
     }
 
+    // A disconnected socket is a hard session boundary. ParkingServerClient
+    // purges decoded RX messages on disconnect; returning here is a second
+    // guard so no stale snapshot can overwrite SERVER_DISCONNECTED/HOLD.
+    if (!parking_server_connected_) {
+        return;
+    }
+
     // Do not replay trajectory-scoped safety events yet. A reconnect may
     // be a fresh Server process with no active trajectory, so the session
     // snapshot must be reconciled before any queued event can be trusted.

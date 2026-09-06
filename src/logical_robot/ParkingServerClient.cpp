@@ -45,6 +45,7 @@ void ParkingServerClient::close()
     }
     state_ = ConnectionState::DISCONNECTED;
     rx_buffer_.clear();
+    rx_messages_.clear();
     tx_queue_.clear();
     tx_offset_ = 0U;
 }
@@ -57,6 +58,10 @@ void ParkingServerClient::markDisconnected()
     }
     state_ = ConnectionState::DISCONNECTED;
     rx_buffer_.clear();
+    // Decoded messages are scoped to the TCP session that produced them.
+    // Never let an ACK/session snapshot from a dead connection survive into
+    // the next connection and overwrite Executive's fail-closed HOLD state.
+    rx_messages_.clear();
     tx_queue_.clear();
     tx_offset_ = 0U;
 }

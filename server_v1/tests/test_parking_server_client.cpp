@@ -366,6 +366,9 @@ void testReconnectAfterPeerClose()
 {
     ScriptedServer server([](int listen_fd) {
         const int first = acceptClient(listen_fd);
+        sendAll(first,
+                "{\"type\":\"ack\",\"version\":1,\"accepted\":true,\"seq\":66}\n");
+        ::shutdown(first, SHUT_RDWR);
         ::close(first);
 
         const int second = acceptClient(listen_fd);
@@ -378,15 +381,37 @@ void testReconnectAfterPeerClose()
     Config config = makeConfig(server.port());
     ParkingServerClient client(config);
     client.init();
+    CHECK_TRUE(waitConnected(client), "reconnect_first_connect_failed");
 
-    const auto messages = collectMessages(client, 1, 2000);
+    // Give the peer time to queue the stale ACK + FIN, then drive one session
+    // to DISCONNECTED. markDisconnected() must purge seq=66 before reconnect.
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    bool saw_disconnect = false;
+    const auto disconnect_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(1000);
+    while (std::chrono::steady_clock::now() < disconnect_deadline) {
+        client.service();
+        if (!client.connected()) {
+            saw_disconnect = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CHECK_TRUE(saw_disconnect, "reconnect_disconnect_not_observed");
+
+    ParkingServerMessage stale;
+    CHECK_TRUE(!client.popMessage(stale),
+               "reconnect_stale_message_survived_session_boundary");
+
+    CHECK_TRUE(waitConnected(client, 1500), "reconnect_second_connect_failed");
+    const auto messages = collectMessages(client, 1, 1500);
     server.joinAndRethrow();
 
     CHECK_TRUE(messages.size() == 1, "reconnect_no_message");
     CHECK_TRUE(messages[0].type == ParkingServerMessageType::ACK,
                "reconnect_message_not_ack");
     CHECK_TRUE(messages[0].has_sequence && messages[0].sequence == 77,
-               "reconnect_wrong_seq");
+               "reconnect_wrong_seq_or_stale_seq66");
     client.close();
 }
 

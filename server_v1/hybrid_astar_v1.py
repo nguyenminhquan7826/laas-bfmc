@@ -6,7 +6,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
@@ -76,24 +76,40 @@ class DrivableGrid:
             packed=base64.b64decode(payload["data_b64"]),
         )
 
+    def is_cell_drivable(self, ix: int, iy: int) -> bool:
+        if ix < 0 or ix >= self.width_cells or iy < 0 or iy >= self.height_cells:
+            return False
+        idx = iy * self.width_cells + ix
+        byte = self.packed[idx >> 3]
+        return bool((byte >> (idx & 7)) & 1)
+
+    def cell_bounds(self, ix: int, iy: int) -> Tuple[float, float, float, float]:
+        x_min = ix * self.resolution_m
+        x_max = min(self.width_x_m, (ix + 1) * self.resolution_m)
+        y_min = iy * self.resolution_m
+        y_max = min(self.height_y_m, (iy + 1) * self.resolution_m)
+        return x_min, x_max, y_min, y_max
+
     def is_drivable(self, x: float, y: float) -> bool:
         if x < 0.0 or x > self.width_x_m or y < 0.0 or y > self.height_y_m:
             return False
         ix = min(self.width_cells - 1, max(0, int(x / self.resolution_m)))
         iy = min(self.height_cells - 1, max(0, int(y / self.resolution_m)))
-        idx = iy * self.width_cells + ix
-        byte = self.packed[idx >> 3]
-        return bool((byte >> (idx & 7)) & 1)
+        return self.is_cell_drivable(ix, iy)
 
 
 class HybridAStarPlanner:
-    """Offline Hybrid A* prototype.
+    """Offline Hybrid A* prototype with fail-closed collision modes.
 
-    Safety limitation:
-      Collision checking currently protects only the rear-axle reference point.
-      Full body footprint checking must not be enabled until rear/front overhang
-      geometry has been physically verified.
+    REAR_AXLE_POINT_ONLY preserves the existing V1 behavior.
+    FULL_FOOTPRINT checks an oriented rectangular vehicle body against both
+    the CAD drivable grid and parking-slot obstacles. FULL_FOOTPRINT refuses
+    to initialize unless the required physical geometry is explicitly marked
+    verified; the planner never infers missing overhangs.
     """
+
+    POINT_COLLISION_MODE = "REAR_AXLE_POINT_ONLY"
+    FULL_FOOTPRINT_MODE = "FULL_FOOTPRINT"
 
     def __init__(self, map_cfg: dict, vehicle_cfg: dict, planner_cfg: dict):
         self.map_cfg = map_cfg
@@ -102,7 +118,11 @@ class HybridAStarPlanner:
 
         self.map_width = float(map_cfg["map"]["width_x_m"])
         self.map_height = float(map_cfg["map"]["height_y_m"])
-        self.wheelbase = float(vehicle_cfg["geometry"]["wheelbase_m"])
+
+        geometry = vehicle_cfg["geometry"]
+        self.wheelbase = float(geometry["wheelbase_m"])
+        self.vehicle_length = float(geometry["length_m"])
+        self.vehicle_width = float(geometry["width_m"])
 
         search = planner_cfg["search"]
         motion = planner_cfg["motion"]
@@ -132,9 +152,20 @@ class HybridAStarPlanner:
         self.goal_pos_tol = float(goal["position_tolerance_m"])
         self.goal_yaw_tol = math.radians(float(goal["yaw_tolerance_deg"]))
 
+        self.collision_mode = str(collision.get("mode", self.POINT_COLLISION_MODE)).upper()
+        if self.collision_mode not in (self.POINT_COLLISION_MODE, self.FULL_FOOTPRINT_MODE):
+            raise ValueError(f"unsupported collision.mode={self.collision_mode}")
+
         self.obstacle_inflation = float(collision["obstacle_inflation_m"])
         self.treat_unknown_as_blocked = bool(collision.get("treat_unknown_slots_as_blocked", True))
         self.require_drivable_area = bool(collision.get("require_drivable_area", False))
+        self.require_verified_geometry = bool(collision.get("require_verified_geometry", True))
+
+        self.rear_overhang: Optional[float] = None
+        self.front_overhang: Optional[float] = None
+        self.body_center_from_rear_axle: Optional[float] = None
+        if self.collision_mode == self.FULL_FOOTPRINT_MODE:
+            self._load_verified_footprint_geometry(geometry)
 
         self.drivable_grid: Optional[DrivableGrid] = None
         semantic = map_cfg.get("semantic_map", {})
@@ -147,12 +178,51 @@ class HybridAStarPlanner:
                     raise FileNotFoundError(f"required drivable grid not found: {grid_path}")
             else:
                 self.drivable_grid = DrivableGrid.load(grid_path)
-                if abs(self.drivable_grid.width_x_m - self.map_width) > 1e-6 or abs(self.drivable_grid.height_y_m - self.map_height) > 1e-6:
+                if (
+                    abs(self.drivable_grid.width_x_m - self.map_width) > 1e-6
+                    or abs(self.drivable_grid.height_y_m - self.map_height) > 1e-6
+                ):
                     raise ValueError("drivable-grid physical extent does not match map_v1")
         elif self.require_drivable_area:
-            raise ValueError("collision.require_drivable_area=true but map semantic_map.drivable_grid_file is not configured")
+            raise ValueError(
+                "collision.require_drivable_area=true but map semantic_map.drivable_grid_file is not configured"
+            )
 
         self.max_steer = max((abs(v) for v in self.steering_samples), default=1.0)
+
+    def _load_verified_footprint_geometry(self, geometry: dict) -> None:
+        if self.require_verified_geometry and not bool(geometry.get("footprint_verified", False)):
+            raise ValueError("FULL_FOOTPRINT requires geometry.footprint_verified=true")
+
+        required = ("rear_overhang_m", "front_overhang_m")
+        missing = [key for key in required if geometry.get(key) is None]
+        if missing:
+            raise ValueError(
+                "FULL_FOOTPRINT requires measured geometry: " + ", ".join(missing)
+            )
+
+        rear = float(geometry["rear_overhang_m"])
+        front = float(geometry["front_overhang_m"])
+        if rear < 0.0 or front < 0.0 or self.vehicle_length <= 0.0 or self.vehicle_width <= 0.0:
+            raise ValueError("FULL_FOOTPRINT geometry dimensions must be positive/non-negative")
+
+        expected_length = rear + self.wheelbase + front
+        if abs(expected_length - self.vehicle_length) > 0.01:
+            raise ValueError(
+                "FULL_FOOTPRINT geometry inconsistent: length_m must equal "
+                "rear_overhang_m + wheelbase_m + front_overhang_m within 0.01 m"
+            )
+
+        center = self.vehicle_length / 2.0 - rear
+        configured_center = geometry.get("body_center_from_rear_axle_m")
+        if configured_center is not None and abs(float(configured_center) - center) > 0.01:
+            raise ValueError(
+                "FULL_FOOTPRINT geometry inconsistent: body_center_from_rear_axle_m"
+            )
+
+        self.rear_overhang = rear
+        self.front_overhang = front
+        self.body_center_from_rear_axle = center
 
     @staticmethod
     def normalize_angle(a: float) -> float:
@@ -186,16 +256,132 @@ class HybridAStarPlanner:
     def point_hits_slot_obstacle(self, x: float, y: float, obstacles: Sequence[RectObstacle]) -> bool:
         m = self.obstacle_inflation
         for obs in obstacles:
-            if (obs.x_min - m) <= x <= (obs.x_max + m) and (obs.y_min - m) <= y <= (obs.y_max + m):
+            if (
+                (obs.x_min - m) <= x <= (obs.x_max + m)
+                and (obs.y_min - m) <= y <= (obs.y_max + m)
+            ):
                 return True
         return False
 
     def point_collision(self, x: float, y: float, obstacles: Sequence[RectObstacle]) -> bool:
-        # V1 collision uses the rear-axle reference point. It must stay inside the
-        # CAD-derived drivable region and outside OCCUPIED/UNKNOWN parking slots.
         if not self.point_in_drivable_area(x, y):
             return True
         return self.point_hits_slot_obstacle(x, y, obstacles)
+
+    def _footprint_obb(
+        self, pose: Pose
+    ) -> Tuple[float, float, float, float, float, float, float, float]:
+        if self.body_center_from_rear_axle is None:
+            raise RuntimeError("footprint OBB requested without verified geometry")
+        c = math.cos(pose.yaw)
+        s = math.sin(pose.yaw)
+        center_offset = self.body_center_from_rear_axle
+        cx = pose.x + center_offset * c
+        cy = pose.y + center_offset * s
+        ux, uy = c, s
+        vx, vy = -s, c
+        return (
+            cx,
+            cy,
+            ux,
+            uy,
+            vx,
+            vy,
+            self.vehicle_length / 2.0,
+            self.vehicle_width / 2.0,
+        )
+
+    @staticmethod
+    def _obb_intersects_aabb(
+        obb: Tuple[float, float, float, float, float, float, float, float],
+        x_min: float,
+        x_max: float,
+        y_min: float,
+        y_max: float,
+    ) -> bool:
+        cx, cy, ux, uy, vx, vy, half_l, half_w = obb
+        acx = (x_min + x_max) * 0.5
+        acy = (y_min + y_max) * 0.5
+        ahx = max(0.0, (x_max - x_min) * 0.5)
+        ahy = max(0.0, (y_max - y_min) * 0.5)
+        dx = acx - cx
+        dy = acy - cy
+
+        for ax, ay in ((1.0, 0.0), (0.0, 1.0), (ux, uy), (vx, vy)):
+            center_distance = abs(dx * ax + dy * ay)
+            obb_radius = (
+                half_l * abs(ux * ax + uy * ay)
+                + half_w * abs(vx * ax + vy * ay)
+            )
+            aabb_radius = ahx * abs(ax) + ahy * abs(ay)
+            if center_distance > obb_radius + aabb_radius + 1e-12:
+                return False
+        return True
+
+    def footprint_corners(self, pose: Pose) -> List[Tuple[float, float]]:
+        cx, cy, ux, uy, vx, vy, half_l, half_w = self._footprint_obb(pose)
+        corners: List[Tuple[float, float]] = []
+        for longitudinal in (-half_l, half_l):
+            for lateral in (-half_w, half_w):
+                corners.append(
+                    (
+                        cx + longitudinal * ux + lateral * vx,
+                        cy + longitudinal * uy + lateral * vy,
+                    )
+                )
+        return corners
+
+    def footprint_in_drivable_area(self, pose: Pose) -> bool:
+        obb = self._footprint_obb(pose)
+        corners = self.footprint_corners(pose)
+        min_x = min(x for x, _ in corners)
+        max_x = max(x for x, _ in corners)
+        min_y = min(y for _, y in corners)
+        max_y = max(y for _, y in corners)
+
+        if min_x < 0.0 or max_x > self.map_width or min_y < 0.0 or max_y > self.map_height:
+            return False
+
+        if self.drivable_grid is None:
+            return not self.require_drivable_area
+
+        grid = self.drivable_grid
+        ix0 = max(0, int(math.floor(min_x / grid.resolution_m)))
+        ix1 = min(grid.width_cells - 1, int(math.floor(max_x / grid.resolution_m)))
+        iy0 = max(0, int(math.floor(min_y / grid.resolution_m)))
+        iy1 = min(grid.height_cells - 1, int(math.floor(max_y / grid.resolution_m)))
+
+        for iy in range(iy0, iy1 + 1):
+            for ix in range(ix0, ix1 + 1):
+                if grid.is_cell_drivable(ix, iy):
+                    continue
+                x_min, x_max, y_min, y_max = grid.cell_bounds(ix, iy)
+                if self._obb_intersects_aabb(obb, x_min, x_max, y_min, y_max):
+                    return False
+        return True
+
+    def footprint_hits_slot_obstacle(
+        self, pose: Pose, obstacles: Sequence[RectObstacle]
+    ) -> bool:
+        obb = self._footprint_obb(pose)
+        m = self.obstacle_inflation
+        for obs in obstacles:
+            if self._obb_intersects_aabb(
+                obb,
+                obs.x_min - m,
+                obs.x_max + m,
+                obs.y_min - m,
+                obs.y_max + m,
+            ):
+                return True
+        return False
+
+    def pose_collision(self, pose: Pose, obstacles: Sequence[RectObstacle]) -> bool:
+        if self.collision_mode == self.POINT_COLLISION_MODE:
+            return self.point_collision(pose.x, pose.y, obstacles)
+        if not self.footprint_in_drivable_area(pose):
+            return True
+        return self.footprint_hits_slot_obstacle(pose, obstacles)
 
     def simulate_primitive(
         self,
@@ -211,8 +397,10 @@ class HybridAStarPlanner:
             signed_ds = direction * ds
             x += signed_ds * math.cos(yaw)
             y += signed_ds * math.sin(yaw)
-            yaw = self.normalize_angle(yaw + signed_ds / self.wheelbase * math.tan(steer_rad))
-            if self.point_collision(x, y, obstacles):
+            yaw = self.normalize_angle(
+                yaw + signed_ds / self.wheelbase * math.tan(steer_rad)
+            )
+            if self.pose_collision(Pose(x, y, yaw), obstacles):
                 return None
             remaining -= ds
         return Pose(x, y, yaw)
@@ -223,24 +411,48 @@ class HybridAStarPlanner:
             base += self.direction_switch_penalty
         if self.max_steer > 1e-9:
             base += self.steering_penalty * abs(steer_rad) / self.max_steer
-            base += self.steering_change_penalty * abs(steer_rad - parent.steer_rad) / self.max_steer
+            base += (
+                self.steering_change_penalty
+                * abs(steer_rad - parent.steer_rad)
+                / self.max_steer
+            )
         return base
 
     def plan(self, start: Pose, goal: Pose, obstacles: Sequence[RectObstacle]) -> PlanResult:
-        if not self.point_in_drivable_area(start.x, start.y):
-            return PlanResult(False, [], math.inf, 0, "start_outside_drivable_area")
-        if not self.point_in_drivable_area(goal.x, goal.y):
-            return PlanResult(False, [], math.inf, 0, "goal_outside_drivable_area")
-        if self.point_hits_slot_obstacle(start.x, start.y, obstacles):
-            return PlanResult(False, [], math.inf, 0, "start_in_slot_obstacle")
-        if self.point_hits_slot_obstacle(goal.x, goal.y, obstacles):
-            return PlanResult(False, [], math.inf, 0, "goal_in_slot_obstacle")
+        if self.collision_mode == self.POINT_COLLISION_MODE:
+            if not self.point_in_drivable_area(start.x, start.y):
+                return PlanResult(False, [], math.inf, 0, "start_outside_drivable_area")
+            if not self.point_in_drivable_area(goal.x, goal.y):
+                return PlanResult(False, [], math.inf, 0, "goal_outside_drivable_area")
+            if self.point_hits_slot_obstacle(start.x, start.y, obstacles):
+                return PlanResult(False, [], math.inf, 0, "start_in_slot_obstacle")
+            if self.point_hits_slot_obstacle(goal.x, goal.y, obstacles):
+                return PlanResult(False, [], math.inf, 0, "goal_in_slot_obstacle")
+        else:
+            if not self.footprint_in_drivable_area(start):
+                return PlanResult(False, [], math.inf, 0, "start_footprint_outside_drivable_area")
+            if not self.footprint_in_drivable_area(goal):
+                return PlanResult(False, [], math.inf, 0, "goal_footprint_outside_drivable_area")
+            if self.footprint_hits_slot_obstacle(start, obstacles):
+                return PlanResult(False, [], math.inf, 0, "start_footprint_in_slot_obstacle")
+            if self.footprint_hits_slot_obstacle(goal, obstacles):
+                return PlanResult(False, [], math.inf, 0, "goal_footprint_in_slot_obstacle")
 
-        start_node = Node(start.x, start.y, self.normalize_angle(start.yaw), 0.0, None, 0, 0.0)
+        start_node = Node(
+            start.x,
+            start.y,
+            self.normalize_angle(start.yaw),
+            0.0,
+            None,
+            0,
+            0.0,
+        )
         counter = 0
         open_heap: List[Tuple[float, int, Node]] = []
         heapq.heappush(open_heap, (self.heuristic(start, goal), counter, start_node))
-        best_g: Dict[Tuple[int, int, int], float] = {self.state_key(start.x, start.y, start.yaw): 0.0}
+        best_g: Dict[Tuple[int, int, int], float] = {
+            self.state_key(start.x, start.y, start.yaw): 0.0
+        }
 
         expansions = 0
         while open_heap and expansions < self.max_expansions:
@@ -297,7 +509,11 @@ def slot_rect(slot: dict, source_id: str) -> RectObstacle:
     return RectObstacle(min(xs), max(xs), min(ys), max(ys), source_id)
 
 
-def build_slot_obstacles(map_cfg: dict, slot_states: Dict[str, str], target_slot: Optional[str] = None) -> List[RectObstacle]:
+def build_slot_obstacles(
+    map_cfg: dict,
+    slot_states: Dict[str, str],
+    target_slot: Optional[str] = None,
+) -> List[RectObstacle]:
     out: List[RectObstacle] = []
     for slot in map_cfg["slots"]:
         sid = slot["id"]

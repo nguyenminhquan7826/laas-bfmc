@@ -14,6 +14,9 @@ geometry:
   # rear axle -> geometric body center along vehicle longitudinal axis.
   # Once rear_overhang_m is measured: length_m/2 - rear_overhang_m
   body_center_from_rear_axle_m: null
+  # Hard software gate for FULL_FOOTPRINT collision mode.
+  # Set true only after the physical measurements below are verified.
+  footprint_verified: false
 steering:
   software_limit_deg: 25.0
   thesis_measured_vehicle_angle_deg_at_servo_30: 22.84
@@ -29,3 +32,9 @@ verification_status:
   rear_overhang: TBD_MEASURE
   front_overhang: TBD_MEASURE
   planner_max_steering: TBD_MEASURE
+  full_footprint:
+    status: BLOCKED_PENDING_PHYSICAL_MEASUREMENT
+    required_measurements:
+    - wheelbase_m
+    - rear_overhang_m
+    - front_overhang_m

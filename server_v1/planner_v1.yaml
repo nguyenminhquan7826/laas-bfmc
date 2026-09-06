@@ -31,6 +31,7 @@ collision:
   obstacle_inflation_m: 0.03
   treat_unknown_slots_as_blocked: true
   require_drivable_area: true
+  require_verified_geometry: true
   drivable_area_mode: CAD_GRID_POINT_REFERENCE
   drivable_grid_resolution_m: 0.01
 notes:
@@ -38,8 +39,11 @@ notes:
   equation.
 - Final motion direction may be FORWARD or REVERSE; terminal pose quality is what
   defines parking success.
-- Planner output is simulation-only until vehicle footprint geometry is physically
-  verified.
 - UNKNOWN is never treated as a candidate FREE parking slot.
 - 'CAD-derived DRIVABLE_AREA V1 is mandatory: every integration sample of each motion
   primitive must remain drivable.'
+- FULL_FOOTPRINT collision support is implemented in hybrid_astar_v1.py using an
+  oriented body rectangle against CAD-grid cells and slot obstacles.
+- FULL_FOOTPRINT must not be selected until vehicle_v1 geometry has measured front
+  and rear overhangs and geometry.footprint_verified=true.
+- Planner output remains simulation-only; parking actuation is not authorized.

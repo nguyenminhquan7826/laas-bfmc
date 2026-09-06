@@ -4,7 +4,8 @@
 Safety scope:
 - Planning/simulation only.
 - Does not talk to STM32, UART, motors, or steering actuators.
-- Full vehicle footprint is still NOT verified.
+- Measured full-vehicle footprint collision is enabled for offline planning.
+- Parking actuation remains unauthorized; the server has no actuator interface.
 - Staleness thresholds are configurable prototype guards, not frozen safety limits.
 """
 
@@ -307,7 +308,8 @@ def validate_plan_candidate(
         for value_name, value in (("x", node.x), ("y", node.y), ("yaw", node.yaw), ("g", node.g), ("steer", node.steer_rad)):
             if not math.isfinite(float(value)):
                 return False, f"nonfinite_node_{value_name}:{i}"
-        if ctx.planner.point_collision(float(node.x), float(node.y), obstacles):
+        node_pose = Pose(float(node.x), float(node.y), float(node.yaw))
+        if ctx.planner.pose_collision(node_pose, obstacles):
             return False, f"node_collision:{i}"
         if i == 0:
             if node.direction != 0:
@@ -380,7 +382,8 @@ def validate_serialized_trajectory(
             return False, f"trajectory_speed_direction_mismatch:{i}"
         if direction == "REVERSE" and vals["v_ref_mps"] > 1e-9:
             return False, f"trajectory_speed_direction_mismatch:{i}"
-        if ctx.planner.point_collision(vals["x_m"], vals["y_m"], obstacles):
+        serialized_pose = Pose(vals["x_m"], vals["y_m"], vals["yaw_rad"])
+        if ctx.planner.pose_collision(serialized_pose, obstacles):
             return False, f"trajectory_point_collision:{i}"
 
         if prev is not None:

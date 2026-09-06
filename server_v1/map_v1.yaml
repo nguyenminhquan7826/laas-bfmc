@@ -108,7 +108,8 @@ notes:
   because the uploaded PDF is the exact map.
 - Previous manual parking dimensions are preserved under legacy_manual_parking_measurements
   for later physical cross-check.
-- goal_pose remains unset until rear-axle-to-body geometry is physically verified.
+- goal_pose fields remain unset; slot_selector_v1 computes the exact rear-axle goal
+  from the measured rear-axle-to-body-center offset.
 - UNKNOWN must never be treated as FREE by the server slot selector.
 - Do not use white paint markings themselves as collision obstacles; drivable-area
   semantics are classified separately.
@@ -136,7 +137,7 @@ geometry:
   visual_reference: EXTRACTED_FROM_CAD_VECTOR
   white_stroke_paths: map_lines_v1.json
   semantic_status: DRIVABLE_AREA_V1_ACTIVE
-  planner_scope: FULL_MAP_POINT_REFERENCE_TEST
+  planner_scope: FULL_MAP_FULL_FOOTPRINT_TEST
   markings_policy:
     crosswalk_stripes: MARKING_NOT_PHYSICAL_OBSTACLE
     dashed_center_lines: MARKING_NOT_PHYSICAL_OBSTACLE
@@ -194,6 +195,6 @@ semantic_map:
     crosswalk_markings: DRIVABLE
     parking_paint_lines: DRIVABLE
     outside_road_regions: NON_DRIVABLE
-  scope: FULL_MAP_POINT_REFERENCE_V1
-  warning: Rear-axle point only; full vehicle footprint is still disabled until overhang
-    geometry is measured.
+  scope: FULL_MAP_FULL_FOOTPRINT_V1
+  warning: FULL_FOOTPRINT uses measured vehicle geometry for offline planning; parking
+    actuation remains unauthorized.

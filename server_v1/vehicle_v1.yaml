@@ -21,6 +21,10 @@ steering:
   # Physical servo command that produces the straightest front-wheel alignment.
   # Verified manually on the vehicle on 2026-09-06.
   servo_center_deg: 75.0
+  # Verified usable servo command range. These are servo commands, NOT yet
+  # physical front-wheel steering angles for the Hybrid A* bicycle model.
+  servo_command_min_deg: 45.0
+  servo_command_max_deg: 105.0
   software_limit_deg: 25.0
   thesis_measured_vehicle_angle_deg_at_servo_30: 22.84
   planner_max_steering_deg: null
@@ -51,6 +55,13 @@ verification_status:
     status: PHYSICALLY_VERIFIED_STRAIGHT
     current_servo_command_deg: 75.0
     wheel_steering_angle_deg: 0.0
+  steering_servo_command_range:
+    status: PHYSICALLY_VERIFIED_COMMAND_LIMITS
+    min_servo_command_deg: 45.0
+    center_servo_command_deg: 75.0
+    max_servo_command_deg: 105.0
+    symmetric_about_center: true
+    note: Physical front-wheel steering angles at these command limits are still TBD.
   planner_max_steering: TBD_MEASURE
   full_footprint:
     status: GEOMETRY_MEASURED_SOFTWARE_COLLISION_ENABLED

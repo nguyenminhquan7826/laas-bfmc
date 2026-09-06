@@ -3,10 +3,20 @@
 #include <string>
 
 #include "../laas_core/Config.hpp"
+#include "../laas_core/CpuAffinity.hpp"
 #include "../execution_control/Executive.hpp"
 
 int main(int argc, char* argv[])
 {
+    // Raspberry Pi 5 default CPU layout:
+    //   CPU0 -> left available for OS/IRQ/background work
+    //   CPU1 -> laas_pp (this process and threads created afterward)
+    //   CPU2,3 -> AI process via ai/run_ai_affinity.py
+    // Override with LAAS_MAIN_CPU=<index>; use LAAS_MAIN_CPU=off to disable.
+    if (!laas::configureMainCpuAffinity()) {
+        return 2;
+    }
+
     laas::Config config;
 
     if (argc > 1) {

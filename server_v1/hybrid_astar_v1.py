@@ -168,6 +168,9 @@ class HybridAStarPlanner:
             self._load_verified_footprint_geometry(geometry)
 
         self.drivable_grid: Optional[DrivableGrid] = None
+        self._drivable_blocked_prefix: Optional[List[int]] = None
+        self._drivable_prefix_grid_id: Optional[int] = None
+        self._drivable_prefix_stride: int = 0
         semantic = map_cfg.get("semantic_map", {})
         grid_file = semantic.get("drivable_grid_file")
         if grid_file:
@@ -188,6 +191,7 @@ class HybridAStarPlanner:
                 "collision.require_drivable_area=true but map semantic_map.drivable_grid_file is not configured"
             )
 
+        self._ensure_drivable_blocked_prefix()
         self.max_steer = max((abs(v) for v in self.steering_samples), default=1.0)
 
     def _load_verified_footprint_geometry(self, geometry: dict) -> None:
@@ -331,6 +335,62 @@ class HybridAStarPlanner:
                 )
         return corners
 
+    def _ensure_drivable_blocked_prefix(self) -> None:
+        grid = self.drivable_grid
+        if grid is None:
+            self._drivable_blocked_prefix = None
+            self._drivable_prefix_grid_id = None
+            self._drivable_prefix_stride = 0
+            return
+
+        grid_id = id(grid)
+        if (
+            self._drivable_blocked_prefix is not None
+            and self._drivable_prefix_grid_id == grid_id
+        ):
+            return
+
+        stride = grid.width_cells + 1
+        prefix = [0] * ((grid.height_cells + 1) * stride)
+        for iy in range(grid.height_cells):
+            row_blocked = 0
+            prev_base = iy * stride
+            base = (iy + 1) * stride
+            for ix in range(grid.width_cells):
+                if not grid.is_cell_drivable(ix, iy):
+                    row_blocked += 1
+                prefix[base + ix + 1] = prefix[prev_base + ix + 1] + row_blocked
+
+        self._drivable_blocked_prefix = prefix
+        self._drivable_prefix_grid_id = grid_id
+        self._drivable_prefix_stride = stride
+
+    def _blocked_count_in_rect(self, ix0: int, iy0: int, ix1: int, iy1: int) -> int:
+        self._ensure_drivable_blocked_prefix()
+        grid = self.drivable_grid
+        prefix = self._drivable_blocked_prefix
+        if grid is None or prefix is None:
+            return 0
+
+        ix0 = max(0, min(grid.width_cells - 1, ix0))
+        ix1 = max(0, min(grid.width_cells - 1, ix1))
+        iy0 = max(0, min(grid.height_cells - 1, iy0))
+        iy1 = max(0, min(grid.height_cells - 1, iy1))
+        if ix0 > ix1 or iy0 > iy1:
+            return 0
+
+        stride = self._drivable_prefix_stride
+        x0 = ix0
+        x1 = ix1 + 1
+        y0 = iy0
+        y1 = iy1 + 1
+        return (
+            prefix[y1 * stride + x1]
+            - prefix[y0 * stride + x1]
+            - prefix[y1 * stride + x0]
+            + prefix[y0 * stride + x0]
+        )
+
     def footprint_in_drivable_area(self, pose: Pose) -> bool:
         obb = self._footprint_obb(pose)
         corners = self.footprint_corners(pose)
@@ -350,6 +410,13 @@ class HybridAStarPlanner:
         ix1 = min(grid.width_cells - 1, int(math.floor(max_x / grid.resolution_m)))
         iy0 = max(0, int(math.floor(min_y / grid.resolution_m)))
         iy1 = min(grid.height_cells - 1, int(math.floor(max_y / grid.resolution_m)))
+
+        # Exact fail-safe broad phase: if the footprint AABB contains no blocked
+        # CAD cells, the OBB cannot intersect a blocked cell. This removes the
+        # expensive Python cell scan for the common all-drivable case without
+        # relaxing collision semantics.
+        if self._blocked_count_in_rect(ix0, iy0, ix1, iy1) == 0:
+            return True
 
         for iy in range(iy0, iy1 + 1):
             for ix in range(ix0, ix1 + 1):

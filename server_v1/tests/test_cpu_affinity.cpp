@@ -24,6 +24,9 @@ int main()
     CpuIndexConfig cfg;
     std::string reason;
 
+    expect(!cfg.enabled && cfg.cpu == -1,
+           "default CpuIndexConfig must represent affinity OFF");
+
     expect(parseCpuIndexConfig("1", cfg, reason), "CPU1 should parse");
     expect(cfg.enabled && cfg.cpu == 1, "CPU1 result mismatch");
 
@@ -43,6 +46,18 @@ int main()
     CPU_ZERO(&allowed);
     expect(::sched_getaffinity(0, sizeof(allowed), &allowed) == 0,
            "sched_getaffinity should work on Linux runner");
+    const std::string allowed_before = laas::formatCpuSet(allowed);
+
+    expect(::unsetenv("LAAS_MAIN_CPU") == 0, "unsetenv should succeed");
+    expect(laas::configureMainCpuAffinity(),
+           "default configureMainCpuAffinity should succeed with affinity OFF");
+
+    cpu_set_t after_default{};
+    CPU_ZERO(&after_default);
+    expect(::sched_getaffinity(0, sizeof(after_default), &after_default) == 0,
+           "default affinity verification read should succeed");
+    expect(laas::formatCpuSet(after_default) == allowed_before,
+           "default affinity OFF must not change the Linux CPU mask");
 
     int selected = -1;
     for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
@@ -57,7 +72,7 @@ int main()
     expect(::setenv("LAAS_MAIN_CPU", selected_text.c_str(), 1) == 0,
            "setenv should succeed");
     expect(laas::configureMainCpuAffinity(),
-           "configureMainCpuAffinity should pin an allowed CPU");
+           "explicit LAAS_MAIN_CPU should pin an allowed CPU");
 
     cpu_set_t actual{};
     CPU_ZERO(&actual);
@@ -67,6 +82,6 @@ int main()
            "runtime affinity must contain exactly the selected CPU");
 #endif
 
-    std::cout << "[PASS] main CPU affinity parser + runtime smoke\n";
+    std::cout << "[PASS] main CPU affinity default OFF + explicit pin smoke\n";
     return 0;
 }

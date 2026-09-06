@@ -39,6 +39,12 @@ int main()
         const float negative =
             servoOffsetToBicycleSteeringDeg(-phi_deg[i]);
         assert(near(negative, -predicted, 1e-5f));
+
+        // The numerical inverse must recover the forward polynomial itself
+        // essentially exactly.
+        const float round_trip =
+            bicycleSteeringDegToServoOffset(predicted);
+        assert(near(round_trip, phi_deg[i], 1e-3f));
     }
 
     assert(near(servoOffsetToBicycleSteeringDeg(0.0f), 0.0f, 1e-6f));
@@ -46,12 +52,14 @@ int main()
                 kBicycleSteeringMaxDeg,
                 1e-4f));
 
-    // Inverse mapping should recover the servo-relative thesis sample points
-    // to much better than the one-degree STM32 command resolution.
+    // When the raw thesis table is inverted through the fitted cubic rather
+    // than through its own exact forward value, the worst observed servo-angle
+    // discrepancy is about 0.52 deg (at the 25-deg sample), still below the
+    // current STM32 integer-degree command resolution.
     for (int i = 0; i < 7; ++i) {
         const float recovered =
             bicycleSteeringDegToServoOffset(bicycle_deg[i]);
-        assert(near(recovered, phi_deg[i], 0.35f));
+        assert(near(recovered, phi_deg[i], 0.55f));
     }
 
     // Current vehicle absolute servo calibration.

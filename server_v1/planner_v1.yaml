@@ -25,25 +25,20 @@ goal:
   yaw_tolerance_deg: 12.0
   required_final_direction: ANY
   desired_vehicle_alignment: BODY_CENTER_AT_SLOT_CENTER_AND_BODY_PARALLEL_TO_SLOT_SIDES
-  goal_mode: BODY_CENTER_TARGET_REAR_AXLE_PROXY_UNTIL_GEOMETRY_MEASURED
+  goal_mode: BODY_CENTER_TARGET_EXACT_REAR_AXLE_FROM_MEASURED_GEOMETRY
 collision:
-  mode: REAR_AXLE_POINT_ONLY
+  mode: FULL_FOOTPRINT
   obstacle_inflation_m: 0.03
   treat_unknown_slots_as_blocked: true
   require_drivable_area: true
   require_verified_geometry: true
-  drivable_area_mode: CAD_GRID_POINT_REFERENCE
+  drivable_area_mode: CAD_GRID_FULL_ORIENTED_BODY
   drivable_grid_resolution_m: 0.01
 notes:
-- Standard bicycle model uses tan(delta), not the sin(delta) typo seen in the thesis
-  equation.
-- Final motion direction may be FORWARD or REVERSE; terminal pose quality is what
-  defines parking success.
+- Standard bicycle model uses tan(delta), not the sin(delta) typo seen in the thesis equation.
+- Final motion direction may be FORWARD or REVERSE; terminal pose quality is what defines parking success.
 - UNKNOWN is never treated as a candidate FREE parking slot.
-- 'CAD-derived DRIVABLE_AREA V1 is mandatory: every integration sample of each motion
-  primitive must remain drivable.'
-- FULL_FOOTPRINT collision support is implemented in hybrid_astar_v1.py using an
-  oriented body rectangle against CAD-grid cells and slot obstacles.
-- FULL_FOOTPRINT must not be selected until vehicle_v1 geometry has measured front
-  and rear overhangs and geometry.footprint_verified=true.
+- CAD-derived DRIVABLE_AREA V1 is mandatory: every integration sample of each motion primitive must keep the full oriented vehicle footprint inside the drivable region.
+- FULL_FOOTPRINT uses the measured 0.350 m x 0.210 m body, 0.250 m wheelbase, and 0.050 m front/rear overhangs from vehicle_v1.yaml.
+- The planning reference remains rear_axle_center, but slot goals are converted exactly from body-center targets using the measured 0.125 m rear-axle-to-body-center offset.
 - Planner output remains simulation-only; parking actuation is not authorized.

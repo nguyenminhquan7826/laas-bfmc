@@ -27,6 +27,16 @@ jobs:
       - name: Run scheduler unit test
         run: /tmp/test_scheduler
 
+      - name: Build jitter diagnostics unit test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Isrc \
+            server_v1/tests/test_scheduler_diagnostics.cpp \
+            -o /tmp/test_scheduler_diagnostics
+
+      - name: Run jitter diagnostics unit test
+        run: /tmp/test_scheduler_diagnostics
+
       - name: Audit Executive scheduler structure
         run: |
           python - <<'PY'
@@ -39,9 +49,19 @@ jobs:
 
           assert run.count('handleKeyboardTick();') == 1, 'keyboard tick must occur exactly once'
           assert run.count('telemetryTick();') == 1, 'telemetry tick must occur exactly once'
-          assert 'runPeriodicTask(scheduler_.control' in run
-          assert 'runPeriodicTask(scheduler_.camera' in run
           assert '[SCHEDULER_AUDIT_V1]' in text
+          assert '[SCHEDULER_JITTER_MONITOR_V1]' in text
+
+          for task in ('camera', 'yolo', 'perception', 'decision', 'planning', 'control', 'logging'):
+              needle = f'runPeriodicTask(scheduler_.{task}, scheduler_diagnostics_.{task}'
+              assert needle in run, f'missing diagnostics for {task}'
+
+          assert 'scheduler_diagnostics_.keyboard' in run
+          assert '"[SCHED]"' in text
+          assert 'controlMissed=' in text
+          assert 'controlMaxLateMs=' in text
+          assert 'cameraMaxExecUs=' in text
+          assert 'yoloMaxExecUs=' in text
 
           control_start = run.index('runPeriodicTask(scheduler_.control')
           control_end = run.index('runPeriodicTask(scheduler_.logging', control_start)
@@ -55,5 +75,5 @@ jobs:
               if not line.lstrip().startswith('//')
           )
           assert 'vehicle_.send' not in bench, 'parking bench must remain NO UART'
-          print('[PASS] Executive scheduler structure and NO PARKING UART')
+          print('[PASS] scheduler jitter instrumentation and NO PARKING UART')
           PY

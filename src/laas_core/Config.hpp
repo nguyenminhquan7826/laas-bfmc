@@ -142,7 +142,11 @@ struct RuntimeConfig {
 
     int camera_period_ms = 33;
     int yolo_period_ms = 333;  // ~3.00 FPS sustained AI rate
-    int perception_period_ms = 33;
+    // Pi 5 benchmark: lane perception typically takes ~40 ms (P95 ~47 ms).
+    // A 50 ms period gives a sustainable 20 Hz start-to-start cadence instead
+    // of repeatedly overrunning the former 33 ms target. Control and camera
+    // remain independently scheduled at 20 ms and 33 ms respectively.
+    int perception_period_ms = 50;
     int decision_period_ms = 50;
     int planning_period_ms = 50;
     int control_period_ms = 20;

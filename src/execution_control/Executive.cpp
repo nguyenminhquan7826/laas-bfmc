@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <sstream>
 #include <thread>
 
 #include <fcntl.h>
@@ -1288,31 +1289,34 @@ void Executive::loggingTick() const
         sd = scheduler_diagnostics_;
     }
 
-    std::cout << "[SCHED]"
-              << " controlThread=1"
-              << " cameraThread=1"
-              << " controlDtMs=" << sd.control.last_interval_ms
-              << " controlMaxDtMs=" << sd.control.max_interval_ms
-              << " controlExecUs=" << sd.control.last_exec_us
-              << " controlMaxExecUs=" << sd.control.max_exec_us
-              << " controlLateMs=" << sd.control.last_lateness_ms
-              << " controlMaxLateMs=" << sd.control.max_lateness_ms
-              << " controlMissed=" << sd.control.missed_periods
-              << " cameraExecUs=" << sd.camera.last_exec_us
-              << " cameraMaxExecUs=" << sd.camera.max_exec_us
-              << " cameraLateMs=" << sd.camera.last_lateness_ms
-              << " cameraMissed=" << sd.camera.missed_periods
-              << " yoloExecUs=" << sd.yolo.last_exec_us
-              << " yoloMaxExecUs=" << sd.yolo.max_exec_us
-              << " yoloLateMs=" << sd.yolo.last_lateness_ms
-              << " yoloMissed=" << sd.yolo.missed_periods
-              << " perceptionExecUs=" << sd.perception.last_exec_us
-              << " perceptionMaxExecUs=" << sd.perception.max_exec_us
-              << " perceptionLateMs=" << sd.perception.last_lateness_ms
-              << " perceptionMissed=" << sd.perception.missed_periods
-              << " planningExecUs=" << sd.planning.last_exec_us
-              << " decisionExecUs=" << sd.decision.last_exec_us
-              << "\n";
+    // Build the diagnostics line first, then emit it in one insertion. This
+    // avoids partial-field interleaving with logs produced by worker threads.
+    std::ostringstream sched_line;
+    sched_line << "[SCHED]"
+               << " controlThread=1"
+               << " cameraThread=1"
+               << " controlDtMs=" << sd.control.last_interval_ms
+               << " controlMaxDtMs=" << sd.control.max_interval_ms
+               << " controlExecUs=" << sd.control.last_exec_us
+               << " controlMaxExecUs=" << sd.control.max_exec_us
+               << " controlLateMs=" << sd.control.last_lateness_ms
+               << " controlMaxLateMs=" << sd.control.max_lateness_ms
+               << " controlMissed=" << sd.control.missed_periods
+               << " cameraExecUs=" << sd.camera.last_exec_us
+               << " cameraMaxExecUs=" << sd.camera.max_exec_us
+               << " cameraLateMs=" << sd.camera.last_lateness_ms
+               << " cameraMissed=" << sd.camera.missed_periods
+               << " yoloExecUs=" << sd.yolo.last_exec_us
+               << " yoloMaxExecUs=" << sd.yolo.max_exec_us
+               << " yoloLateMs=" << sd.yolo.last_lateness_ms
+               << " yoloMissed=" << sd.yolo.missed_periods
+               << " perceptionExecUs=" << sd.perception.last_exec_us
+               << " perceptionMaxExecUs=" << sd.perception.max_exec_us
+               << " perceptionLateMs=" << sd.perception.last_lateness_ms
+               << " perceptionMissed=" << sd.perception.missed_periods
+               << " planningExecUs=" << sd.planning.last_exec_us
+               << " decisionExecUs=" << sd.decision.last_exec_us;
+    std::cout << sched_line.str() << "\n";
 
     std::cout   << "[EXEC] "
                 << "op=" << operatingModeToString(operating_mode_.load())

@@ -12,7 +12,6 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 root = Path(__file__).resolve().parents[1]
 hpp_path = root / "src/execution_control/Executive.hpp"
 cpp_path = root / "src/execution_control/Executive.cpp"
-ci_path = root / ".github/workflows/scheduler-audit-tests.yml"
 
 hpp = hpp_path.read_text()
 hpp = replace_once(
@@ -219,6 +218,13 @@ new_logging_start = '''void Executive::loggingTick() const
     const UartRxStats uart_stats = vehicle_.rxStats();
 '''
 cpp = replace_once(cpp, old_logging_start, new_logging_start, 'logging state snapshot')
+
+# Replace only after the snapshot block. This avoids changing the right-hand
+# member names inside the synchronized copies above.
+logging_pos = cpp.index('void Executive::loggingTick() const')
+tail_pos = cpp.index('    const UartRxStats uart_stats = vehicle_.rxStats();', logging_pos)
+head = cpp[:tail_pos]
+tail = cpp[tail_pos:]
 repls = {
     'parking_safety_result_.evaluated': 'parking_safety_result.evaluated',
     'parking_tracker_debug_.trajectory_id': 'parking_tracker_debug.trajectory_id',
@@ -238,11 +244,8 @@ repls = {
     'telemetry_sequence_resets_': 'telemetry_sequence_resets',
 }
 for old, new in repls.items():
-    # These identifiers exist outside logging too. Replace only in logging tail.
-    logging_pos = cpp.index('void Executive::loggingTick() const')
-    head, tail = cpp[:logging_pos], cpp[logging_pos:]
     tail = tail.replace(old, new)
-    cpp = head + tail
+cpp = head + tail
 
 cpp = replace_once(
     cpp,
@@ -258,50 +261,4 @@ cpp = replace_once(
 )
 cpp_path.write_text(cpp)
 
-ci = ci_path.read_text()
-ci = replace_once(
-    ci,
-    "          for task in ('camera', 'yolo', 'perception', 'decision', 'planning', 'control', 'logging'):\n"
-    "              needle = f'runPeriodicTask(scheduler_.{task}, scheduler_diagnostics_.{task}'\n"
-    "              assert needle in run, f'missing diagnostics for {task}'\n\n",
-    "          for task in ('camera', 'yolo', 'perception', 'decision', 'planning', 'logging'):\n"
-    "              needle = f'runPeriodicTask(scheduler_.{task}, scheduler_diagnostics_.{task}'\n"
-    "              assert needle in run, f'missing diagnostics for {task}'\n\n"
-    "          assert 'runPeriodicTask(scheduler_.control' not in run, 'control must not run on cooperative vision loop'\n"
-    "          assert 'telemetryTick();' not in run, 'telemetry must follow independent control timing'\n\n"
-    "          worker_start = text.index('void Executive::controlWorkerLoop()')\n"
-    "          worker_end = text.index('void Executive::setUserRunRequest', worker_start)\n"
-    "          worker = text[worker_start:worker_end]\n"
-    "          assert 'runPeriodicTask(' in worker and 'scheduler_.control' in worker\n"
-    "          assert 'telemetryTick();' in worker\n"
-    "          assert worker.index('parkingNetworkTick();') < worker.index('controlTick();') < worker.index('parkingBenchControlTick();')\n"
-    "          assert 'control_state_mutex_' in worker\n"
-    "          assert 'scheduler_diagnostics_.control = local_control_diagnostics' in worker\n\n",
-    'ci timer assertions',
-)
-old_ci_control = '''          control_start = run.index('runPeriodicTask(scheduler_.control')
-          control_end = run.index('runPeriodicTask(scheduler_.logging', control_start)
-          control = run[control_start:control_end]
-          assert control.index('parkingNetworkTick();') < control.index('controlTick();') < control.index('parkingBenchControlTick();')
-
-'''
-ci = replace_once(ci, old_ci_control, '', 'remove old ci control ordering')
-ci = replace_once(
-    ci,
-    "          assert 'controlMissed=' in text\n",
-    "          assert 'controlMissed=' in text\n"
-    "          assert 'controlThread=1' in text\n"
-    "          assert '[CONTROL_THREAD_SPLIT_V1]' in text\n"
-    "          assert 'joinControlWorker();' in text\n"
-    "          assert 'if (!user_run_request_.load())' in text\n",
-    'ci control split markers',
-)
-ci = replace_once(
-    ci,
-    "          print('[PASS] scheduler jitter + main affinity OFF default + CPU2,3 AI + NO PARKING UART')\n",
-    "          print('[PASS] threaded 20ms control isolation + jitter monitor + affinity policy + NO PARKING UART')\n",
-    'ci pass label',
-)
-ci_path.write_text(ci)
-
-print('[PATCH] control thread split applied')
+print('[PATCH] control thread split source applied')

@@ -96,7 +96,10 @@ jobs:
 
           assert 'configureMainCpuAffinity()' in main
           assert 'LAAS_MAIN_CPU' in main
-          assert 'const std::string requested = (env && *env) ? env : "1";' in affinity
+          assert 'affinity OFF by default' in main
+          assert 'const std::string requested = from_env ? env : "off";' in affinity
+          assert 'bool enabled{false};' in affinity
+          assert 'int cpu{-1};' in affinity
           assert 'sched_setaffinity' in affinity
           assert 'sched_getaffinity' in affinity
 
@@ -108,5 +111,5 @@ jobs:
           assert 'options.intra_op_num_threads = 2' in ai_detector
           assert 'options.inter_op_num_threads = 1' in ai_detector
 
-          print('[PASS] scheduler jitter + CPU1 main + CPU2,3 AI + NO PARKING UART')
+          print('[PASS] scheduler jitter + main affinity OFF default + CPU2,3 AI + NO PARKING UART')
           PY

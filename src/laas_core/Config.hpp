@@ -2,6 +2,7 @@
 
 #include <string>
 #include "Messages.hpp"
+#include "SteeringCalibration.hpp"
 
 namespace laas {
 
@@ -45,12 +46,19 @@ struct UdpConfig {
 };
 
 struct VehicleConfig {
-    float wheelbase_m = 0.2515f;
+    // Physical measurements verified on the current shared mechanical platform.
+    float wheelbase_m = 0.250f;
     float desired_speed_mps = 0.15f;
-    float steering_limit_deg = 25.0f;
-    float servo_center = 94.5f;
-    int servo_min = 60;
-    int servo_max = 130;
+
+    // Bicycle-equivalent steering range derived from the thesis Ackermann table.
+    // This is a software baseline pending final wheel-angle validation on the
+    // current vehicle; parking actuation remains disabled.
+    float steering_limit_deg = steering_calibration::kBicycleSteeringMaxDeg;
+
+    // Absolute STM32 servo commands physically verified on the current vehicle.
+    float servo_center = 75.0f;
+    int servo_min = 45;
+    int servo_max = 105;
 };
 
 

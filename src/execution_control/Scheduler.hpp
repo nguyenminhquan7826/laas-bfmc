@@ -15,6 +15,7 @@ public:
     void mark(uint64_t now_ms);
 
     int periodMs() const { return period_ms_; }
+    uint64_t lastRunMs() const { return last_run_ms_; }
 
 private:
     int period_ms_ = 20;

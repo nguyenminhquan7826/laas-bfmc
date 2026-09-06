@@ -275,15 +275,31 @@ void Executive::run()
 
     running_.store(true);
 
+    // [CAMERA_THREAD_SPLIT_V1]
+    // Capture owns CameraInterface while run() is active and only publishes
+    // the latest FrameMsg to the thread-safe Blackboard. Perception may overrun
+    // without delaying acquisition of the newest camera frame.
+    try {
+        camera_thread_ = std::thread(&Executive::cameraWorkerLoop, this);
+    } catch (const std::exception& e) {
+        std::cerr << "[CAMERA_THREAD] start failed: " << e.what() << "\n";
+        running_.store(false);
+        state_.store(RuntimeState::ERROR);
+        return;
+    }
+
+    std::cout << "[CAMERA_THREAD] started periodMs="
+              << config_.runtime.camera_period_ms << "\n";
+
     // [CONTROL_THREAD_SPLIT_V1]
-    // Start the independent 20 ms control path before entering the
-    // cooperative vision/planning loop. Blackboard access is already
-    // synchronized; non-blackboard control state is protected separately.
+    // Start the independent 20 ms control path before entering the remaining
+    // cooperative perception/planning loop.
     try {
         control_thread_ = std::thread(&Executive::controlWorkerLoop, this);
     } catch (const std::exception& e) {
         std::cerr << "[CONTROL_THREAD] start failed: " << e.what() << "\n";
         running_.store(false);
+        joinCameraWorker();
         state_.store(RuntimeState::ERROR);
         return;
     }
@@ -314,10 +330,8 @@ void Executive::run()
         // Telemetry is consumed by the independent control worker so a
         // camera/perception overrun cannot delay the latest control state.
 
-        runPeriodicTask(scheduler_.camera, scheduler_diagnostics_.camera, [this]() {
-            cameraTick();
-        });
-
+        // Camera capture runs on cameraWorkerLoop(); tasks below always
+        // consume the newest frame available on the Blackboard.
         runPeriodicTask(scheduler_.yolo, scheduler_diagnostics_.yolo, [this]() {
             yoloTick();
         });
@@ -345,6 +359,7 @@ void Executive::run()
 
     // Prevent any further worker command before issuing the final STOP.
     running_.store(false);
+    joinCameraWorker();
     joinControlWorker();
 
     ControlCmdMsg stop_cmd;
@@ -362,6 +377,7 @@ void Executive::run()
 void Executive::stop()
 {
     running_.store(false);
+    joinCameraWorker();
     joinControlWorker();
     yolo_.close();
 #ifdef LAAS_ENABLE_PARKING_CLIENT
@@ -369,6 +385,42 @@ void Executive::stop()
 #endif
     vehicle_.close();
     camera_.close();
+}
+
+void Executive::joinCameraWorker()
+{
+    if (!camera_thread_.joinable()) {
+        return;
+    }
+
+    if (camera_thread_.get_id() == std::this_thread::get_id()) {
+        return;
+    }
+
+    camera_thread_.join();
+}
+
+void Executive::cameraWorkerLoop()
+{
+    PeriodicTaskDiagnostics local_camera_diagnostics;
+
+    while (running_.load()) {
+        const std::uint64_t runs_before = local_camera_diagnostics.runs;
+
+        runPeriodicTask(
+            scheduler_.camera,
+            local_camera_diagnostics,
+            [this]() {
+                cameraTick();
+            });
+
+        if (local_camera_diagnostics.runs != runs_before) {
+            std::lock_guard<std::mutex> lock(diagnostics_mutex_);
+            scheduler_diagnostics_.camera = local_camera_diagnostics;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 }
 
 void Executive::joinControlWorker()
@@ -1236,6 +1288,7 @@ void Executive::loggingTick() const
 
     std::cout << "[SCHED]"
               << " controlThread=1"
+              << " cameraThread=1"
               << " controlDtMs=" << sd.control.last_interval_ms
               << " controlMaxDtMs=" << sd.control.max_interval_ms
               << " controlExecUs=" << sd.control.last_exec_us

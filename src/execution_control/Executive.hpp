@@ -57,6 +57,8 @@ private:
     void handleKeyboardTick();
     void controlWorkerLoop();
     void joinControlWorker();
+    void cameraWorkerLoop();
+    void joinCameraWorker();
 
     void cameraTick();
     void yoloTick();
@@ -134,9 +136,11 @@ private:
     std::atomic<OperatingMode> operating_mode_{OperatingMode::LANE_DRIVING};
 
     // [CONTROL_THREAD_SPLIT_V1]
-    // Vision stays on the Executive thread. The 20 ms control path runs
-    // independently so camera/perception overruns cannot block control.
+    // [CAMERA_THREAD_SPLIT_V1]
+    // Control and camera capture have independent periodic workers. The
+    // remaining perception/decision/planning pipeline stays cooperative.
     std::thread control_thread_;
+    std::thread camera_thread_;
     mutable std::mutex control_state_mutex_;
     mutable std::mutex diagnostics_mutex_;
 

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Launch best_AI.py with strict Raspberry Pi CPU affinity.
+"""Launch best_AI.py with the measured Raspberry Pi 5 CPU policy.
 
-Default layout:
-  CPU0 -> left available for OS / IRQ / background work
-  CPU1 -> laas_pp
-  CPU2,3 -> this AI process
+Measured default:
+  laas_pp -> affinity OFF; Linux may schedule it on CPU0-3
+  AI      -> constrained to CPU2,3
 
-Override the AI mask with LAAS_AI_CPUS=2,3. Use LAAS_AI_CPUS=off to disable.
+Whole-process pinning of laas_pp to CPU1 or CPU0,1 did not improve control and
+reduced vision throughput, so LAAS_MAIN_CPU is kept only as a diagnostic
+benchmark override. Override the AI mask with LAAS_AI_CPUS; use ``off`` only
+for explicit comparison tests.
 """
 
 from __future__ import annotations
@@ -18,9 +20,8 @@ from cpu_affinity import configure_ai_affinity, format_cpu_list
 
 
 def main() -> int:
-    # Keep helper libraries from creating additional large thread pools before
-    # importing NumPy/OpenCV/ONNX Runtime. ONNX itself is explicitly configured
-    # in best_AI.py with intra_op_num_threads=2 and inter_op_num_threads=1.
+    # Limit helper-library worker pools before importing NumPy/OpenCV/ONNX.
+    # ONNX itself uses two intra-op threads and one inter-op thread.
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
     os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -40,10 +41,10 @@ def main() -> int:
             "source=LAAS_AI_CPUS/default"
         )
 
-    # Import only after affinity and thread-limit environment are established.
+    # Import only after affinity and thread limits are established.
     import best_AI
 
-    # Avoid an independent OpenCV worker pool competing with ONNX on CPU2/CPU3.
+    # Avoid an extra OpenCV worker pool competing with ONNX on CPU2/CPU3.
     best_AI.cv2.setNumThreads(1)
 
     print(

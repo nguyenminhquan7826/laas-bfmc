@@ -33,6 +33,7 @@
 #ifdef LAAS_ENABLE_PARKING_CLIENT
 #include "../logical_robot/ParkingServerClient.hpp"
 #include "../logical_robot/ParkingSessionSyncPolicy.hpp"
+#include "../logical_robot/ParkingSafetyEventSyncPolicy.hpp"
 #include "../logical_robot/ParkingTrajectoryStatusPolicy.hpp"
 #endif
 
@@ -80,6 +81,13 @@ private:
     void flushParkingSafetyEvents();
 
 #ifdef LAAS_ENABLE_PARKING_CLIENT
+    void discardParkingSafetyEventsForTrajectory(
+        std::uint64_t trajectory_id,
+        const std::string& reason);
+
+    void reconcileParkingSafetyEventsWithSession(
+        const ParkingSessionSnapshot& session);
+
     void applyParkingSessionSnapshot(
         const ParkingSessionSnapshot& session);
 
@@ -173,9 +181,10 @@ private:
     bool have_sent_parking_status_sequence_{false};
     std::uint64_t parking_status_tx_sequence_{1};
 
-    // Step-11: transition-based parking safety synchronization.
-    // Events generated during a TCP outage remain queued and are
-    // transmitted after the connection is restored.
+    // Step-11/12: transition-based parking safety synchronization.
+    // Events generated during a TCP outage remain queued, but reconnect
+    // never replays them until the new Server session snapshot is known.
+    // Trajectory-scoped events from a stale/restarted session are discarded.
     std::deque<PendingParkingSafetyEvent>
         parking_safety_event_queue_;
 
@@ -191,6 +200,7 @@ private:
     // Executive holds parking until the Server session snapshot is reconciled
     // with the local trajectory. Reconnect always re-enters this hold.
     bool parking_session_query_pending_{false};
+    bool parking_session_snapshot_received_{false};
     bool parking_session_sync_hold_{true};
     std::string parking_session_sync_reason_{"NOT_CONNECTED"};
 

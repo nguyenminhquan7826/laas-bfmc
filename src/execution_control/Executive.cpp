@@ -1,5 +1,6 @@
 #include "Executive.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -247,6 +248,7 @@ bool Executive::init()
         parking_server_.init();
         parking_trajectory_status_policy_.reset();
         parking_session_query_pending_ = false;
+        parking_session_snapshot_received_ = false;
         parking_session_sync_hold_ = true;
         parking_session_sync_reason_ = "NOT_CONNECTED";
     }
@@ -745,6 +747,7 @@ void Executive::parkingNetworkTick()
         parking_session_sync_hold_ = true;
         parking_session_sync_reason_ = "SERVER_DISCONNECTED";
         parking_session_query_pending_ = false;
+        parking_session_snapshot_received_ = false;
         std::cout << "[PARKING][SYNC] disconnected -> HOLD\n";
     }
 
@@ -754,6 +757,7 @@ void Executive::parkingNetworkTick()
         parking_session_sync_hold_ = true;
         parking_session_sync_reason_ = "AWAITING_SESSION_SYNC";
         parking_session_query_pending_ = true;
+        parking_session_snapshot_received_ = false;
 
         // Force the newest bench/local inputs to be republished on a
         // fresh TCP session even if their sequence did not change.
@@ -763,11 +767,9 @@ void Executive::parkingNetworkTick()
         std::cout << "[PARKING][SYNC] connected -> HOLD awaiting session\n";
     }
 
-    // A safety event may have been generated while TCP was down.
-    // Flush it before session_query so SERVER_TIMEOUT is ordered
-    // ahead of the snapshot request on the same TCP stream.
-    flushParkingSafetyEvents();
-
+    // Do not replay trajectory-scoped safety events yet. A reconnect may
+    // be a fresh Server process with no active trajectory, so the session
+    // snapshot must be reconciled before any queued event can be trusted.
     if (parking_server_connected_ && parking_session_query_pending_) {
         if (parking_server_.sendSessionQuery()) {
             parking_session_query_pending_ = false;
@@ -847,6 +849,11 @@ void Executive::parkingNetworkTick()
         }
     }
 
+    // applyParkingSessionSnapshot() reconciles queued safety events with
+    // the Server-owned trajectory. flushParkingSafetyEvents() itself remains
+    // gated until at least one snapshot has been received on this connection.
+    flushParkingSafetyEvents();
+
     if (!parking_server_connected_) {
         return;
     }
@@ -874,6 +881,67 @@ void Executive::parkingNetworkTick()
 
 
 #ifdef LAAS_ENABLE_PARKING_CLIENT
+void Executive::discardParkingSafetyEventsForTrajectory(
+    std::uint64_t trajectory_id,
+    const std::string& reason)
+{
+    if (trajectory_id == 0U) {
+        return;
+    }
+
+    const std::size_t before = parking_safety_event_queue_.size();
+    parking_safety_event_queue_.erase(
+        std::remove_if(
+            parking_safety_event_queue_.begin(),
+            parking_safety_event_queue_.end(),
+            [trajectory_id](const PendingParkingSafetyEvent& pending) {
+                return pending.has_trajectory_id &&
+                       pending.trajectory_id == trajectory_id;
+            }),
+        parking_safety_event_queue_.end());
+
+    const std::size_t dropped =
+        before - parking_safety_event_queue_.size();
+    if (dropped > 0U) {
+        std::cout << "[PARKING][SAFETY] drop stale queued events count="
+                  << dropped
+                  << " tid=" << trajectory_id
+                  << " reason=" << reason << "\n";
+    }
+}
+
+void Executive::reconcileParkingSafetyEventsWithSession(
+    const ParkingSessionSnapshot& session)
+{
+    const std::size_t before = parking_safety_event_queue_.size();
+
+    parking_safety_event_queue_.erase(
+        std::remove_if(
+            parking_safety_event_queue_.begin(),
+            parking_safety_event_queue_.end(),
+            [&session](const PendingParkingSafetyEvent& pending) {
+                if (!pending.has_trajectory_id) {
+                    return false;
+                }
+                return !ParkingSafetyEventSyncPolicy::sessionOwnsTrajectory(
+                    session, pending.trajectory_id);
+            }),
+        parking_safety_event_queue_.end());
+
+    const std::size_t dropped =
+        before - parking_safety_event_queue_.size();
+    if (dropped > 0U) {
+        parking_blocking_safety_active_ = false;
+        std::cout << "[PARKING][SAFETY] reconcile dropped="
+                  << dropped
+                  << " serverTid="
+                  << (session.has_active_trajectory
+                          ? std::to_string(session.active_trajectory_id)
+                          : std::string("none"))
+                  << "\n";
+    }
+}
+
 void Executive::clearLocalParkingTrajectory(
     const std::string& reason)
 {
@@ -882,7 +950,14 @@ void Executive::clearLocalParkingTrajectory(
         std::cout << "[PARKING][SYNC] clear local tid="
                   << local.trajectory_id
                   << " reason=" << reason << "\n";
+        discardParkingSafetyEventsForTrajectory(
+            local.trajectory_id, reason);
     }
+
+    // Blocking safety state belongs to the trajectory/session being cleared.
+    // Never let it generate SAFETY_CLEARED for a later replacement trajectory.
+    parking_blocking_safety_active_ = false;
+    last_parking_safety_reason_ = "NOT_EVALUATED";
 
     blackboard_.setParkingTrajectory(ParkingTrajectoryMsg{});
     parking_trajectory_tracker_.reset();
@@ -892,6 +967,9 @@ void Executive::clearLocalParkingTrajectory(
 void Executive::applyParkingSessionSnapshot(
     const ParkingSessionSnapshot& session)
 {
+    reconcileParkingSafetyEventsWithSession(session);
+    parking_session_snapshot_received_ = true;
+
     const ParkingTrajectoryMsg local = blackboard_.parkingTrajectory();
     const ParkingSessionSyncDecision decision =
         ParkingSessionSyncPolicy::evaluate(session, local);
@@ -1008,7 +1086,8 @@ void Executive::flushParkingSafetyEvents()
 #ifdef LAAS_ENABLE_PARKING_CLIENT
 
     if (!config_.parking.enable ||
-        !parking_server_connected_) {
+        !parking_server_connected_ ||
+        !parking_session_snapshot_received_) {
         return;
     }
 
@@ -1109,8 +1188,10 @@ void Executive::parkingSafetyEventSyncTick(
             << "\n";
     }
     else if (
-        parkingSafetyReasonIsClear(reason) &&
-        parking_blocking_safety_active_) {
+        ParkingSafetyEventSyncPolicy::canEmitSafetyCleared(
+            parking_session_snapshot_received_,
+            parking_blocking_safety_active_,
+            parkingSafetyReasonIsClear(reason))) {
 
         queueParkingSafetyEvent(
             "SAFETY_CLEARED",

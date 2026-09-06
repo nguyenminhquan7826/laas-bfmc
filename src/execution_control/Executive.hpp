@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #include "../laas_core/Blackboard.hpp"
 #include "../laas_core/Config.hpp"
@@ -53,6 +55,8 @@ public:
 private:
     void configureScheduler();
     void handleKeyboardTick();
+    void controlWorkerLoop();
+    void joinControlWorker();
 
     void cameraTick();
     void yoloTick();
@@ -128,6 +132,13 @@ private:
     std::atomic<bool> user_run_request_{false};
     std::atomic<RuntimeState> state_{RuntimeState::INIT};
     std::atomic<OperatingMode> operating_mode_{OperatingMode::LANE_DRIVING};
+
+    // [CONTROL_THREAD_SPLIT_V1]
+    // Vision stays on the Executive thread. The 20 ms control path runs
+    // independently so camera/perception overruns cannot block control.
+    std::thread control_thread_;
+    mutable std::mutex control_state_mutex_;
+    mutable std::mutex diagnostics_mutex_;
 
     // A camera frame may remain on the blackboard after a failed grab. These
     // timestamps prevent that same frame from being sent/processed repeatedly.

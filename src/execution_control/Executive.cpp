@@ -275,6 +275,22 @@ void Executive::run()
 
     running_.store(true);
 
+    // [CONTROL_THREAD_SPLIT_V1]
+    // Start the independent 20 ms control path before entering the
+    // cooperative vision/planning loop. Blackboard access is already
+    // synchronized; non-blackboard control state is protected separately.
+    try {
+        control_thread_ = std::thread(&Executive::controlWorkerLoop, this);
+    } catch (const std::exception& e) {
+        std::cerr << "[CONTROL_THREAD] start failed: " << e.what() << "\n";
+        running_.store(false);
+        state_.store(RuntimeState::ERROR);
+        return;
+    }
+
+    std::cout << "[CONTROL_THREAD] started periodMs="
+              << config_.runtime.control_period_ms << "\n";
+
     // Keyboard is operator I/O, not a 1 kHz control task. Polling at 20 ms
     // keeps it responsive while avoiding repeated tcgetattr/tcsetattr/fcntl
     // calls on every 1 ms scheduler spin.
@@ -295,9 +311,8 @@ void Executive::run()
             }
         }
 
-        // Telemetry consumption must never depend on keyboard availability.
-        // receiveLatest() is non-blocking and drains the latest UART RX sample.
-        telemetryTick();
+        // Telemetry is consumed by the independent control worker so a
+        // camera/perception overrun cannot delay the latest control state.
 
         runPeriodicTask(scheduler_.camera, scheduler_diagnostics_.camera, [this]() {
             cameraTick();
@@ -319,16 +334,7 @@ void Executive::run()
             planningTick();
         });
 
-        runPeriodicTask(scheduler_.control, scheduler_diagnostics_.control, [this]() {
-#ifdef LAAS_ENABLE_PARKING_CLIENT
-            // Step-11: service parking TCP/protocol before parking safety.
-            // This remains independent of OperatingMode::PARKING.
-            parkingNetworkTick();
-#endif
-
-            controlTick();
-            parkingBenchControlTick();
-        });
+        // Control runs on controlWorkerLoop(); do not execute it here.
 
         runPeriodicTask(scheduler_.logging, scheduler_diagnostics_.logging, [this]() {
             loggingTick();
@@ -336,6 +342,10 @@ void Executive::run()
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+
+    // Prevent any further worker command before issuing the final STOP.
+    running_.store(false);
+    joinControlWorker();
 
     ControlCmdMsg stop_cmd;
     stop_cmd.header.valid = true;
@@ -352,12 +362,65 @@ void Executive::run()
 void Executive::stop()
 {
     running_.store(false);
+    joinControlWorker();
     yolo_.close();
 #ifdef LAAS_ENABLE_PARKING_CLIENT
     parking_server_.close();
 #endif
     vehicle_.close();
     camera_.close();
+}
+
+void Executive::joinControlWorker()
+{
+    if (!control_thread_.joinable()) {
+        return;
+    }
+
+    // stop() is not expected to execute on the control worker, but avoid a
+    // self-join deadlock if that assumption changes later.
+    if (control_thread_.get_id() == std::this_thread::get_id()) {
+        return;
+    }
+
+    control_thread_.join();
+}
+
+void Executive::controlWorkerLoop()
+{
+    PeriodicTaskDiagnostics local_control_diagnostics;
+
+    while (running_.load()) {
+        const std::uint64_t runs_before = local_control_diagnostics.runs;
+
+        runPeriodicTask(
+            scheduler_.control,
+            local_control_diagnostics,
+            [this]() {
+                // All mutable non-blackboard control/parking state is owned by
+                // this worker and observed by logging under the same mutex.
+                std::lock_guard<std::mutex> lock(control_state_mutex_);
+
+                // UART RX parsing already runs in its own thread. Consume the
+                // newest telemetry sample here so perception cannot delay it.
+                telemetryTick();
+
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+                // Preserve the Step-11/12 ordering exactly:
+                // network/session -> lane control -> parking bench safety.
+                parkingNetworkTick();
+#endif
+                controlTick();
+                parkingBenchControlTick();
+            });
+
+        if (local_control_diagnostics.runs != runs_before) {
+            std::lock_guard<std::mutex> lock(diagnostics_mutex_);
+            scheduler_diagnostics_.control = local_control_diagnostics;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 }
 
 void Executive::setUserRunRequest(bool enabled)
@@ -1067,8 +1130,15 @@ void Executive::parkingBenchControlTick()
 void Executive::controlTick()
 {
     const LanePerceptionMsg lane = blackboard_.lane();
-    const BehaviorRequest behavior = blackboard_.behavior();
+    BehaviorRequest behavior = blackboard_.behavior();
     const TrajectoryMsg trajectory = blackboard_.trajectory();
+
+    // Independent hard stop gate for the threaded control path. Q/S can
+    // clear user_run_request_ while the slower decision loop still holds an
+    // older KEEP/FOLLOW behavior snapshot; never send that stale motion.
+    if (!user_run_request_.load()) {
+        behavior.mode = BehaviorMode::STOP;
+    }
 
     ControlCmdMsg raw = computeRawCommand(trajectory, lane, behavior);
     ControlCmdMsg safe = safety_.filter(raw, behavior, lane, trajectory);
@@ -1081,7 +1151,37 @@ void Executive::controlTick()
 
 void Executive::loggingTick() const
 {
-    const VehicleTelemetryMsg telemetry = latest_telemetry_;
+    VehicleTelemetryMsg telemetry;
+    ControlCmdMsg parking_bench_raw_command;
+    ControlCmdMsg parking_bench_safe_command;
+    ParkingTrackerDebug parking_tracker_debug;
+    ParkingSafetyResult parking_safety_result;
+    double telemetry_rx_hz = 0.0;
+    std::uint64_t telemetry_sequence_gaps = 0U;
+    std::uint64_t telemetry_duplicate_frames = 0U;
+    std::uint64_t telemetry_sequence_resets = 0U;
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+    bool parking_session_sync_hold = true;
+    std::string parking_session_sync_reason{"NOT_CONNECTED"};
+#endif
+
+    {
+        std::lock_guard<std::mutex> lock(control_state_mutex_);
+        telemetry = latest_telemetry_;
+        parking_bench_raw_command = parking_bench_raw_command_;
+        parking_bench_safe_command = parking_bench_safe_command_;
+        parking_tracker_debug = parking_tracker_debug_;
+        parking_safety_result = parking_safety_result_;
+        telemetry_rx_hz = telemetry_rx_hz_;
+        telemetry_sequence_gaps = telemetry_sequence_gaps_;
+        telemetry_duplicate_frames = telemetry_duplicate_frames_;
+        telemetry_sequence_resets = telemetry_sequence_resets_;
+#ifdef LAAS_ENABLE_PARKING_CLIENT
+        parking_session_sync_hold = parking_session_sync_hold_;
+        parking_session_sync_reason = parking_session_sync_reason_;
+#endif
+    }
+
     const UartRxStats uart_stats = vehicle_.rxStats();
 
     const std::uint64_t now = nowMs();
@@ -1109,27 +1209,33 @@ void Executive::loggingTick() const
     const ControlCmdMsg safe = blackboard_.safeCommand();
 
     if (config_.parking.enable && config_.parking.bench_mode &&
-        config_.parking.enable_bench_tracker && parking_safety_result_.evaluated) {
-        std::cout << "[PARKING_BENCH] tid=" << parking_tracker_debug_.trajectory_id
-                  << " idx=" << parking_tracker_debug_.nearest_index
-                  << "->" << parking_tracker_debug_.target_index
+        config_.parking.enable_bench_tracker && parking_safety_result.evaluated) {
+        std::cout << "[PARKING_BENCH] tid=" << parking_tracker_debug.trajectory_id
+                  << " idx=" << parking_tracker_debug.nearest_index
+                  << "->" << parking_tracker_debug.target_index
                   << " dir="
-                  << (parking_tracker_debug_.direction == MotionDirection::REVERSE
+                  << (parking_tracker_debug.direction == MotionDirection::REVERSE
                           ? "REV" : "FWD")
-                  << " raw_v=" << parking_bench_raw_command_.speed_mps
-                  << " safe_v=" << parking_bench_safe_command_.speed_mps
-                  << " steer_deg=" << parking_bench_safe_command_.steering_deg
-                  << " cte=" << parking_tracker_debug_.nearest_distance_m
-                  << " safety=" << parking_safety_result_.reason
+                  << " raw_v=" << parking_bench_raw_command.speed_mps
+                  << " safe_v=" << parking_bench_safe_command.speed_mps
+                  << " steer_deg=" << parking_bench_safe_command.steering_deg
+                  << " cte=" << parking_tracker_debug.nearest_distance_m
+                  << " safety=" << parking_safety_result.reason
 #ifdef LAAS_ENABLE_PARKING_CLIENT
-                  << " sync=" << (parking_session_sync_hold_ ? "HOLD" : "READY")
-                  << " syncReason=" << parking_session_sync_reason_
+                  << " sync=" << (parking_session_sync_hold ? "HOLD" : "READY")
+                  << " syncReason=" << parking_session_sync_reason
 #endif
                   << " [NO_UART]\n";
     }
 
-    const SchedulerDiagnostics& sd = scheduler_diagnostics_;
+    SchedulerDiagnostics sd;
+    {
+        std::lock_guard<std::mutex> lock(diagnostics_mutex_);
+        sd = scheduler_diagnostics_;
+    }
+
     std::cout << "[SCHED]"
+              << " controlThread=1"
               << " controlDtMs=" << sd.control.last_interval_ms
               << " controlMaxDtMs=" << sd.control.max_interval_ms
               << " controlExecUs=" << sd.control.last_exec_us
@@ -1167,11 +1273,11 @@ void Executive::loggingTick() const
                 << " ageMs=" << telemetry_age_ms
 
                 // Executive-side consume statistics.
-                << " consumeHz=" << telemetry_rx_hz_
+                << " consumeHz=" << telemetry_rx_hz
                 << " telSeq=" << telemetry.packet_sequence
-                << " consumeSeqSkip=" << telemetry_sequence_gaps_
-                << " consumeDup=" << telemetry_duplicate_frames_
-                << " consumeReset=" << telemetry_sequence_resets_
+                << " consumeSeqSkip=" << telemetry_sequence_gaps
+                << " consumeDup=" << telemetry_duplicate_frames
+                << " consumeReset=" << telemetry_sequence_resets
 
                 // True UART RX-thread statistics.
                 << " uartHz=" << uart_stats.parsed_hz

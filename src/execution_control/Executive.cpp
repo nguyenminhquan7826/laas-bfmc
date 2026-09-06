@@ -1148,8 +1148,7 @@ void Executive::loggingTick() const
               << " perceptionExecUs=" << sd.perception.last_exec_us
               << " planningExecUs=" << sd.planning.last_exec_us
               << " decisionExecUs=" << sd.decision.last_exec_us
-              << "
-";
+              << "\n";
 
     std::cout   << "[EXEC] "
                 << "op=" << operatingModeToString(operating_mode_.load())

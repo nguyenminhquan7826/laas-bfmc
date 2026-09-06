@@ -102,6 +102,16 @@ jobs:
       - name: Run reconnect safety event sync policy test
         run: /tmp/test_parking_safety_event_sync_policy
 
+      - name: Build steering polynomial calibration test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Isrc \
+            server_v1/tests/test_steering_calibration.cpp \
+            -o /tmp/test_steering_calibration
+
+      - name: Run steering polynomial calibration test
+        run: /tmp/test_steering_calibration
+
   full-app-build:
     runs-on: ubuntu-latest
 

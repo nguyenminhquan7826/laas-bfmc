@@ -5,18 +5,18 @@ units:
   angle: rad
 geometry:
   reference_point: rear_axle_center
-  length_m: 0.432
+  length_m: 0.350
   width_m: 0.210
-  wheelbase_m: 0.2515
+  wheelbase_m: 0.250
   track_width_m: 0.1615
-  rear_overhang_m: null
-  front_overhang_m: null
+  rear_overhang_m: 0.050
+  front_overhang_m: 0.050
   # rear axle -> geometric body center along vehicle longitudinal axis.
-  # Once rear_overhang_m is measured: length_m/2 - rear_overhang_m
-  body_center_from_rear_axle_m: null
-  # Hard software gate for FULL_FOOTPRINT collision mode.
-  # Set true only after the physical measurements below are verified.
-  footprint_verified: false
+  # length_m/2 - rear_overhang_m = 0.175 - 0.050 = 0.125 m
+  body_center_from_rear_axle_m: 0.125
+  # Physical body/wheelbase/overhang measurements have been supplied and
+  # normalized from the reported 35/21/25/5/5 values as centimetres.
+  footprint_verified: true
 steering:
   software_limit_deg: 25.0
   thesis_measured_vehicle_angle_deg_at_servo_30: 22.84
@@ -25,16 +25,27 @@ motion:
   parking_nominal_speed_mps: 0.10
   direction_modes: [FORWARD, REVERSE]
 verification_status:
+  body_length:
+    status: PHYSICALLY_MEASURED
+    current_value_m: 0.350
+  body_width:
+    status: PHYSICALLY_MEASURED
+    current_value_m: 0.210
   wheelbase:
-    status: SOFTWARE_BASELINE_PENDING_PHYSICAL_MEASUREMENT
-    current_value_m: 0.2515
-    conflicting_reported_value_m: 0.1895
-  rear_overhang: TBD_MEASURE
-  front_overhang: TBD_MEASURE
+    status: PHYSICALLY_MEASURED_LEFT_RIGHT_AGREE
+    current_value_m: 0.250
+    left_value_m: 0.250
+    right_value_m: 0.250
+    previous_software_baseline_m: 0.2515
+    previous_conflicting_reported_value_m: 0.1895
+  rear_overhang:
+    status: PHYSICALLY_MEASURED
+    current_value_m: 0.050
+  front_overhang:
+    status: PHYSICALLY_MEASURED
+    current_value_m: 0.050
   planner_max_steering: TBD_MEASURE
   full_footprint:
-    status: BLOCKED_PENDING_PHYSICAL_MEASUREMENT
-    required_measurements:
-    - wheelbase_m
-    - rear_overhang_m
-    - front_overhang_m
+    status: GEOMETRY_MEASURED_SOFTWARE_COLLISION_ENABLED
+    consistency_check: rear_overhang + wheelbase + front_overhang = body_length
+    actuation_authorized: false

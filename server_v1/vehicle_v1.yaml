@@ -18,6 +18,9 @@ geometry:
   # normalized from the reported 35/21/25/5/5 values as centimetres.
   footprint_verified: true
 steering:
+  # Physical servo command that produces the straightest front-wheel alignment.
+  # Verified manually on the vehicle on 2026-09-06.
+  servo_center_deg: 75.0
   software_limit_deg: 25.0
   thesis_measured_vehicle_angle_deg_at_servo_30: 22.84
   planner_max_steering_deg: null
@@ -44,6 +47,10 @@ verification_status:
   front_overhang:
     status: PHYSICALLY_MEASURED
     current_value_m: 0.050
+  steering_servo_center:
+    status: PHYSICALLY_VERIFIED_STRAIGHT
+    current_servo_command_deg: 75.0
+    wheel_steering_angle_deg: 0.0
   planner_max_steering: TBD_MEASURE
   full_footprint:
     status: GEOMETRY_MEASURED_SOFTWARE_COLLISION_ENABLED

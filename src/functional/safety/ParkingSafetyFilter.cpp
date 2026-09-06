@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../../laas_core/SteeringCalibration.hpp"
 #include "../../laas_core/Time.hpp"
 
 namespace laas {
@@ -27,9 +28,11 @@ bool ParkingSafetyFilter::finiteCommand(const ControlCmdMsg& command)
 
 int ParkingSafetyFilter::steeringToServo(float steering_deg) const
 {
-    const float raw_servo = config_.vehicle.servo_center + steering_deg;
-    const int servo = static_cast<int>(std::lround(raw_servo));
-    return clampValue(servo, config_.vehicle.servo_min, config_.vehicle.servo_max);
+    return steering_calibration::bicycleSteeringDegToServoCommand(
+        steering_deg,
+        config_.vehicle.servo_center,
+        config_.vehicle.servo_min,
+        config_.vehicle.servo_max);
 }
 
 ControlCmdMsg ParkingSafetyFilter::filter(
@@ -65,9 +68,8 @@ ControlCmdMsg ParkingSafetyFilter::filter(
     if (!config_.parking.enable) return stop("PARKING_DISABLED");
     if (!config_.parking.bench_mode) return stop("NON_BENCH_NOT_AUTHORIZED");
 
-    // Step-10 integration remains bench-only. This gate prevents accidental
-    // actuator use before full-body geometry and the final parking safety
-    // thresholds are verified on the real vehicle.
+    // Parking remains bench-only. This gate prevents accidental actuator use
+    // until the final real-vehicle validation phase is explicitly authorized.
     if (config_.runtime.enable_uart) return stop("UART_MUST_BE_DISABLED_IN_BENCH");
     if (!server_connected) return stop("SERVER_DISCONNECTED");
 

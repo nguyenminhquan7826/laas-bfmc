@@ -8,11 +8,11 @@
 
 int main(int argc, char* argv[])
 {
-    // Raspberry Pi 5 measured CPU policy:
-    //   laas_pp -> affinity OFF by default so Linux can schedule the current
-    //              threaded control + vision workload freely.
+    // Raspberry Pi 5 measured policy after the 20 ms control-thread split:
+    //   laas_pp -> affinity OFF; Linux may schedule its threads on CPU0-3.
     //   AI      -> CPU2,3 via ai/run_ai_affinity.py.
-    // LAAS_MAIN_CPU=<index> remains available for explicit benchmark tests.
+    // Pinning the whole laas_pp process to CPU1 or CPU0,1 reduced measured
+    // scheduler/vision performance, so LAAS_MAIN_CPU is diagnostic only.
     if (!laas::configureMainCpuAffinity()) {
         return 2;
     }

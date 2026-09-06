@@ -37,7 +37,20 @@ jobs:
       - name: Run jitter diagnostics unit test
         run: /tmp/test_scheduler_diagnostics
 
-      - name: Audit Executive scheduler structure
+      - name: Build main CPU affinity parser test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Isrc \
+            server_v1/tests/test_cpu_affinity.cpp \
+            -o /tmp/test_cpu_affinity
+
+      - name: Run main CPU affinity parser test
+        run: /tmp/test_cpu_affinity
+
+      - name: Run AI CPU affinity tests
+        run: python -m unittest -v server_v1.tests.test_ai_cpu_affinity
+
+      - name: Audit Executive scheduler and CPU layout
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -75,5 +88,25 @@ jobs:
               if not line.lstrip().startswith('//')
           )
           assert 'vehicle_.send' not in bench, 'parking bench must remain NO UART'
-          print('[PASS] scheduler jitter instrumentation and NO PARKING UART')
+
+          main = Path('src/app/main.cpp').read_text()
+          affinity = Path('src/laas_core/CpuAffinity.hpp').read_text()
+          ai_launcher = Path('ai/run_ai_affinity.py').read_text()
+          ai_detector = Path('ai/best_AI.py').read_text()
+
+          assert 'configureMainCpuAffinity()' in main
+          assert 'LAAS_MAIN_CPU' in main
+          assert 'const std::string requested = (env && *env) ? env : "1";' in affinity
+          assert 'sched_setaffinity' in affinity
+          assert 'sched_getaffinity' in affinity
+
+          assert 'configure_ai_affinity()' in ai_launcher
+          assert 'LAAS_AI_CPUS' in ai_launcher
+          assert 'best_AI.cv2.setNumThreads(1)' in ai_launcher
+          assert 'OMP_NUM_THREADS' in ai_launcher
+          assert 'OPENBLAS_NUM_THREADS' in ai_launcher
+          assert 'options.intra_op_num_threads = 2' in ai_detector
+          assert 'options.inter_op_num_threads = 1' in ai_detector
+
+          print('[PASS] scheduler jitter + CPU1 main + CPU2,3 AI + NO PARKING UART')
           PY

@@ -19,15 +19,38 @@ geometry:
   footprint_verified: true
 steering:
   # Physical servo command that produces the straightest front-wheel alignment.
-  # Verified manually on the vehicle on 2026-09-06.
+  # Verified manually on the current vehicle on 2026-09-06.
   servo_center_deg: 75.0
-  # Verified usable servo command range. These are servo commands, NOT yet
-  # physical front-wheel steering angles for the Hybrid A* bicycle model.
   servo_command_min_deg: 45.0
   servo_command_max_deg: 105.0
-  software_limit_deg: 25.0
-  thesis_measured_vehicle_angle_deg_at_servo_30: 22.84
-  planner_max_steering_deg: null
+
+  # The current vehicle shares the steering mechanical platform documented in
+  # the supplied 2025 thesis. The raw thesis table is retained here as source
+  # calibration data. phi is servo angle relative to neutral, not the absolute
+  # STM32 command.
+  thesis_calibration:
+    servo_relative_deg: [0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0]
+    left_wheel_deg: [0.0, 5.1, 10.1, 14.72, 18.75, 22.15, 25.0]
+    right_wheel_deg: [0.0, 4.9, 9.2, 13.0, 16.2, 18.75, 21.0]
+    # Ackermann cotangent-average equivalent bicycle angle from Eq. 2.6.
+    bicycle_equivalent_deg: [0.0, 4.998005, 9.629213, 13.807675, 17.384847, 20.314653, 22.835397]
+
+  # Runtime uses one physically symmetric odd cubic for bicycle steering:
+  #   delta_deg = A*phi_deg + B*phi_deg^3
+  # The fit is constrained through phi=0 -> delta=0 and through the thesis
+  # maximum phi=30 -> delta=22.835397 deg. Internal table error stays below
+  # about 0.29 deg. Runtime inversion delta->phi is solved numerically.
+  bicycle_polynomial:
+    form: ODD_CUBIC
+    linear_coefficient: 0.9666368131
+    cubic_coefficient: -0.0002282854502
+    servo_relative_limit_deg: 30.0
+    bicycle_steering_limit_deg: 22.835397
+    max_table_fit_error_deg: 0.285
+    status: THESIS_BASELINE_PENDING_CURRENT_VEHICLE_WHEEL_ANGLE_VALIDATION
+
+  software_limit_deg: 22.835397
+  planner_max_steering_deg: 22.835397
 motion:
   parking_nominal_speed_mps: 0.10
   direction_modes: [FORWARD, REVERSE]
@@ -61,8 +84,14 @@ verification_status:
     center_servo_command_deg: 75.0
     max_servo_command_deg: 105.0
     symmetric_about_center: true
-    note: Physical front-wheel steering angles at these command limits are still TBD.
-  planner_max_steering: TBD_MEASURE
+  steering_bicycle_mapping:
+    status: THESIS_SHARED_PLATFORM_BASELINE
+    current_vehicle_direction_sign_validation: PENDING
+    current_vehicle_wheel_angle_validation: PENDING
+    actuation_authorized: false
+  planner_max_steering:
+    status: THESIS_BASELINE_PENDING_CURRENT_VEHICLE_WHEEL_ANGLE_VALIDATION
+    current_value_deg: 22.835397
   full_footprint:
     status: GEOMETRY_MEASURED_SOFTWARE_COLLISION_ENABLED
     consistency_check: rear_overhang + wheelbase + front_overhang = body_length

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../../laas_core/SteeringCalibration.hpp"
 #include "../../laas_core/Time.hpp"
 
 namespace laas {
@@ -75,9 +76,11 @@ ControlCmdMsg SafetyFilterModule::filter(const ControlCmdMsg& raw_cmd,
 
 int SafetyFilterModule::steeringToServo(float steering_deg) const
 {
-    const float raw_servo = config_.vehicle.servo_center + steering_deg;
-    const int servo = static_cast<int>(std::lround(raw_servo));
-    return clampValue(servo, config_.vehicle.servo_min, config_.vehicle.servo_max);
+    return steering_calibration::bicycleSteeringDegToServoCommand(
+        steering_deg,
+        config_.vehicle.servo_center,
+        config_.vehicle.servo_min,
+        config_.vehicle.servo_max);
 }
 
 }  // namespace laas

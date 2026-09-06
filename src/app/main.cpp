@@ -8,11 +8,11 @@
 
 int main(int argc, char* argv[])
 {
-    // Raspberry Pi 5 default CPU layout:
-    //   CPU0 -> left available for OS/IRQ/background work
-    //   CPU1 -> laas_pp (this process and threads created afterward)
-    //   CPU2,3 -> AI process via ai/run_ai_affinity.py
-    // Override with LAAS_MAIN_CPU=<index>; use LAAS_MAIN_CPU=off to disable.
+    // Raspberry Pi 5 measured CPU policy:
+    //   laas_pp -> affinity OFF by default so Linux can schedule the current
+    //              cooperative camera/perception/control workload freely.
+    //   AI      -> CPU2,3 via ai/run_ai_affinity.py.
+    // LAAS_MAIN_CPU=<index> remains available for explicit benchmark tests.
     if (!laas::configureMainCpuAffinity()) {
         return 2;
     }

@@ -61,25 +61,42 @@ jobs:
           run = text[start:end]
 
           assert run.count('handleKeyboardTick();') == 1, 'keyboard tick must occur exactly once'
-          assert run.count('telemetryTick();') == 1, 'telemetry tick must occur exactly once'
+          assert 'telemetryTick();' not in run, 'telemetry must follow independent control timing'
+          assert 'runPeriodicTask(scheduler_.control' not in run, 'control must not run on cooperative vision loop'
           assert '[SCHEDULER_AUDIT_V1]' in text
           assert '[SCHEDULER_JITTER_MONITOR_V1]' in text
+          assert '[CONTROL_THREAD_SPLIT_V1]' in text
 
-          for task in ('camera', 'yolo', 'perception', 'decision', 'planning', 'control', 'logging'):
+          for task in ('camera', 'yolo', 'perception', 'decision', 'planning', 'logging'):
               needle = f'runPeriodicTask(scheduler_.{task}, scheduler_diagnostics_.{task}'
               assert needle in run, f'missing diagnostics for {task}'
 
+          worker_start = text.index('void Executive::controlWorkerLoop()')
+          worker_end = text.index('void Executive::setUserRunRequest', worker_start)
+          worker = text[worker_start:worker_end]
+          assert 'runPeriodicTask(' in worker and 'scheduler_.control' in worker
+          assert 'telemetryTick();' in worker
+          assert worker.index('parkingNetworkTick();') < worker.index('controlTick();') < worker.index('parkingBenchControlTick();')
+          assert 'control_state_mutex_' in worker
+          assert 'scheduler_diagnostics_.control = local_control_diagnostics' in worker
+
           assert 'scheduler_diagnostics_.keyboard' in run
           assert '"[SCHED]"' in text
+          assert 'controlThread=1' in text
           assert 'controlMissed=' in text
           assert 'controlMaxLateMs=' in text
           assert 'cameraMaxExecUs=' in text
           assert 'yoloMaxExecUs=' in text
+          assert 'joinControlWorker();' in text
+          assert 'if (!user_run_request_.load())' in text
 
-          control_start = run.index('runPeriodicTask(scheduler_.control')
-          control_end = run.index('runPeriodicTask(scheduler_.logging', control_start)
-          control = run[control_start:control_end]
-          assert control.index('parkingNetworkTick();') < control.index('controlTick();') < control.index('parkingBenchControlTick();')
+          logging_start = text.index('void Executive::loggingTick() const')
+          logging = text[logging_start:]
+          assert 'std::lock_guard<std::mutex> lock(control_state_mutex_)' in logging
+          assert 'std::lock_guard<std::mutex> lock(diagnostics_mutex_)' in logging
+          assert 'telemetry_rx_hz = telemetry_rx_hz_;' in logging
+          assert 'telemetry_sequence_gaps = telemetry_sequence_gaps_;' in logging
+          assert 'parking_session_sync_reason = parking_session_sync_reason_;' in logging
 
           bench_start = text.index('void Executive::parkingBenchControlTick()')
           bench_end = text.index('void Executive::controlTick()', bench_start)
@@ -88,6 +105,7 @@ jobs:
               if not line.lstrip().startswith('//')
           )
           assert 'vehicle_.send' not in bench, 'parking bench must remain NO UART'
+          assert 'constexpr bool kActuationAuthorized = false;' in text
 
           main = Path('src/app/main.cpp').read_text()
           affinity = Path('src/laas_core/CpuAffinity.hpp').read_text()
@@ -111,5 +129,5 @@ jobs:
           assert 'options.intra_op_num_threads = 2' in ai_detector
           assert 'options.inter_op_num_threads = 1' in ai_detector
 
-          print('[PASS] scheduler jitter + main affinity OFF default + CPU2,3 AI + NO PARKING UART')
+          print('[PASS] threaded 20ms control isolation + jitter monitor + affinity policy + NO PARKING UART')
           PY

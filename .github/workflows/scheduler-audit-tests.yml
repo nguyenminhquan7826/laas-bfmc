@@ -115,6 +115,17 @@ jobs:
           assert 'configureMainCpuAffinity()' in main
           assert 'LAAS_MAIN_CPU' in main
           assert 'affinity OFF by default' in main
+          assert 'LAAS_PARKING_BENCH_YOLO' in main
+          bench_profile_start = main.index('if (bench_env && std::string(bench_env) == "1")')
+          bench_profile_end = main.index('laas::Executive executive(config);', bench_profile_start)
+          bench_profile = main[bench_profile_start:bench_profile_end]
+          assert 'config.runtime.enable_uart = false;' in bench_profile
+          assert 'config.runtime.enable_uart = true;' not in bench_profile
+          assert 'config.runtime.enable_yolo_udp = bench_yolo_enabled;' in bench_profile
+          assert bench_profile.index('config.runtime.enable_uart = false;') < bench_profile.index('config.runtime.enable_yolo_udp = bench_yolo_enabled;')
+          assert '" UART=OFF"' in bench_profile
+          assert '" YOLO="' in bench_profile
+
           assert 'const std::string requested = from_env ? env : "off";' in affinity
           assert 'bool enabled{false};' in affinity
           assert 'int cpu{-1};' in affinity
@@ -129,5 +140,5 @@ jobs:
           assert 'options.intra_op_num_threads = 2' in ai_detector
           assert 'options.inter_op_num_threads = 1' in ai_detector
 
-          print('[PASS] threaded 20ms control isolation + jitter monitor + affinity policy + NO PARKING UART')
+          print('[PASS] threaded 20ms control + safe bench YOLO + affinity policy + NO PARKING UART')
           PY

@@ -29,7 +29,7 @@ def write_trajectory_json(path: Path, selected: SlotPlan) -> None:
         "trajectory_id": 1,
         "target_slot": selected.slot_id,
         "map_id": "map_v1",
-        "prototype_warning": "OFFLINE_ONLY_REAR_AXLE_POINT_COLLISION",
+        "prototype_warning": "OFFLINE_ONLY_FULL_FOOTPRINT_COLLISION_NO_ACTUATION",
         "points": points,
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -88,7 +88,7 @@ def write_debug_svg(path: Path, map_cfg: dict, slot_states: Dict[str, str], sele
     chunks.append(f'<text x="{sx+10:.1f}" y="{sy-8:.1f}" font-size="16" fill="#ffffff">START</text>')
     chunks.append(f'<circle cx="{gx:.1f}" cy="{gy:.1f}" r="8" fill="#00ff77"/>')
     chunks.append(f'<text x="{gx+10:.1f}" y="{gy-8:.1f}" font-size="16" fill="#ffffff">GOAL(debug)</text>')
-    chunks.append(f'<text x="{margin}" y="{h-8:.1f}" font-size="15" fill="#a00">CAD DRIVABLE_AREA V1 active. Green = drivable rear-axle reference region. OFFLINE PROTOTYPE: full vehicle footprint not yet enabled.</text>')
+    chunks.append(f'<text x="{margin}" y="{h-8:.1f}" font-size="15" fill="#a00">CAD DRIVABLE_AREA V1 + measured FULL_FOOTPRINT collision active. OFFLINE PROTOTYPE: parking actuation remains disabled.</text>')
     chunks.append('</svg>')
     path.write_text("\n".join(chunks), encoding="utf-8")
 
@@ -108,7 +108,6 @@ def main() -> None:
     planner = HybridAStarPlanner(map_cfg, vehicle_cfg, planner_cfg)
     start = Pose(args.start_x, args.start_y, math.radians(args.start_yaw_deg))
 
-    # Same states as the TCP mock test.
     slot_states = {
         "P_B1": "OCCUPIED",
         "P_B2": "FREE",
@@ -119,26 +118,27 @@ def main() -> None:
     selected, candidates = choose_best_free_slot(planner, map_cfg, vehicle_cfg, start, slot_states)
 
     print("[HYBRID-A* V1] OFFLINE PROTOTYPE")
+    print(f"collision_mode={planner.collision_mode}")
     print(f"start=({start.x:.3f}, {start.y:.3f}, {math.degrees(start.yaw):.1f}deg)")
     for c in candidates:
         if c.result.success:
-            print(f"candidate={c.slot_id} PASS cost={c.result.cost:.3f} expansions={c.result.expansions} nodes={len(c.result.path)}")
+            print(f"candidate={c.slot_id} PASS cost={c.result.cost:.3f} expansions={c.result.expansions} nodes={len(c.result.path)} goalMode={c.goal_mode}")
         else:
-            print(f"candidate={c.slot_id} FAIL reason={c.result.reason} expansions={c.result.expansions}")
+            print(f"candidate={c.slot_id} FAIL reason={c.result.reason} expansions={c.result.expansions} goalMode={c.goal_mode}")
 
     if selected is None:
         print("[RESULT] no feasible FREE slot")
         raise SystemExit(2)
 
     print(f"[RESULT] selected={selected.slot_id} cost={selected.result.cost:.3f}")
-    print("drivable_area=PASS (all primitive integration samples checked against CAD grid)")
+    print("full_footprint=PASS (all primitive integration samples checked against CAD grid + slot obstacles)")
     trajectory_path = root / "trajectory_debug.json"
     svg_path = root / "plan_debug.svg"
     write_trajectory_json(trajectory_path, selected)
     write_debug_svg(svg_path, map_cfg, slot_states, selected, start)
     print(f"wrote {trajectory_path.name}")
     print(f"wrote {svg_path.name}")
-    print("WARNING: do not send this trajectory to the vehicle; footprint and final goal geometry are not verified.")
+    print("WARNING: do not send this trajectory to the vehicle; parking actuation remains explicitly unauthorized.")
 
 
 if __name__ == "__main__":

@@ -15,8 +15,8 @@
 namespace laas {
 
 struct CpuIndexConfig {
-    bool enabled{true};
-    int cpu{1};
+    bool enabled{false};
+    int cpu{-1};
 };
 
 inline std::string trimCpuConfig(std::string value)
@@ -104,13 +104,15 @@ inline std::string formatCpuSet(const cpu_set_t& set)
 }
 #endif
 
-// Pin the initial LAAS thread before Executive creates worker threads.
-// Linux threads created afterward inherit this affinity mask unless a library
-// explicitly overrides its own affinity.
+// Main-process affinity is deliberately OFF by default. Pi measurements showed
+// that pinning the entire cooperative Executive (camera + perception + control)
+// to one CPU increases control jitter. LAAS_MAIN_CPU=<index> remains available
+// as an explicit benchmark/diagnostic override.
 inline bool configureMainCpuAffinity()
 {
     const char* env = std::getenv("LAAS_MAIN_CPU");
-    const std::string requested = (env && *env) ? env : "1";
+    const bool from_env = env && *env;
+    const std::string requested = from_env ? env : "off";
 
     CpuIndexConfig config;
     std::string reason;
@@ -122,7 +124,8 @@ inline bool configureMainCpuAffinity()
 
     if (!config.enabled) {
         std::cout << "[CPU] laas_pp affinity=OFF"
-                  << " (LAAS_MAIN_CPU=" << requested << ")\n";
+                  << " source=" << (from_env ? "LAAS_MAIN_CPU" : "default")
+                  << "\n";
         return true;
     }
 
@@ -170,7 +173,7 @@ inline bool configureMainCpuAffinity()
 
     std::cout << "[CPU] laas_pp affinity=" << config.cpu
               << " allowedBefore=" << formatCpuSet(allowed)
-              << " source=" << ((env && *env) ? "LAAS_MAIN_CPU" : "default")
+              << " source=" << (from_env ? "LAAS_MAIN_CPU" : "default")
               << "\n";
     return true;
 #endif

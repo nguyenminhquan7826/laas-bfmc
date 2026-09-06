@@ -22,9 +22,17 @@ private:
     Config config_;
     cv::VideoCapture cap_;
     bool initialized_ = false;
-    int saved_raw_count_ = 0;
+
+    // Camera calibration is fixed for the configured capture size. Build the
+    // remap tables once during init instead of recomputing camera matrices and
+    // distortion maps on every frame.
+    cv::Mat undistort_map1_;
+    cv::Mat undistort_map2_;
+    cv::Rect undistort_valid_roi_;
+    bool undistort_ready_ = false;
 
     bool openCameraDevice();
+    bool prepareUndistortMaps();
     cv::Mat undistortAndResize(const cv::Mat& input) const;
 };
 

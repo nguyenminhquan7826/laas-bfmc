@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
 {
     // Raspberry Pi 5 measured CPU policy:
     //   laas_pp -> affinity OFF by default so Linux can schedule the current
-    //              cooperative camera/perception/control workload freely.
+    //              threaded control + vision workload freely.
     //   AI      -> CPU2,3 via ai/run_ai_affinity.py.
     // LAAS_MAIN_CPU=<index> remains available for explicit benchmark tests.
     if (!laas::configureMainCpuAffinity()) {
@@ -42,17 +42,24 @@ int main(int argc, char* argv[])
     }
 #endif
 
-    // Step-11 bench runtime profile.
+    // Step-11/12 bench runtime profile.
     // Enabled only when LAAS_PARKING_BENCH=1.
     const char* bench_env = std::getenv("LAAS_PARKING_BENCH");
 
     if (bench_env && std::string(bench_env) == "1") {
 
         // HARD safety gate: parking bench must never use UART.
+        // No secondary bench option below is allowed to change this value.
         config.runtime.enable_uart = false;
 
-        // We do not need YOLO for the first network/safety handshake test.
-        config.runtime.enable_yolo_udp = false;
+        // Default parking handshake bench does not need AI. For scheduler/load
+        // testing, LAAS_PARKING_BENCH_YOLO=1 enables only the local UDP YOLO
+        // path while UART remains hard-disabled above.
+        const char* bench_yolo_env =
+            std::getenv("LAAS_PARKING_BENCH_YOLO");
+        const bool bench_yolo_enabled =
+            bench_yolo_env && std::string(bench_yolo_env) == "1";
+        config.runtime.enable_yolo_udp = bench_yolo_enabled;
 
         config.parking.enable = true;
         config.parking.bench_mode = true;
@@ -104,6 +111,7 @@ int main(int argc, char* argv[])
         std::cout
             << "[APP][PARKING_BENCH]"
             << " UART=OFF"
+            << " YOLO=" << (bench_yolo_enabled ? "ON" : "OFF")
             << " server="
             << config.parking.server_host
             << ":"

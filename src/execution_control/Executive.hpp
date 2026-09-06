@@ -10,6 +10,7 @@
 #include "../laas_core/Config.hpp"
 #include "RuntimeState.hpp"
 #include "Scheduler.hpp"
+#include "SchedulerDiagnostics.hpp"
 
 #include "../decision/MissionSupervisor.hpp"
 #include "../functional/perception/LanePerceptionModule.hpp"
@@ -100,6 +101,7 @@ private:
     Config config_;
     Blackboard blackboard_;
     Scheduler scheduler_;
+    SchedulerDiagnostics scheduler_diagnostics_;
 
     CameraInterface camera_;
     UdpYoloInterface yolo_;

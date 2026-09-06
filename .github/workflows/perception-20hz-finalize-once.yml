@@ -1,0 +1,47 @@
+name: Perception 20Hz Finalize Once
+
+on:
+  push:
+    branches:
+      - step12-status-sync
+    paths:
+      - scripts/apply_perception_20hz_finalize.py
+      - .github/workflows/perception-20hz-finalize-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: step12-status-sync
+          fetch-depth: 0
+
+      - name: Apply perception 20Hz finalization
+        run: python scripts/apply_perception_20hz_finalize.py
+
+      - name: Verify expected diff
+        run: |
+          git diff --check
+          grep -q 'int perception_period_ms = 50;' src/laas_core/Config.hpp
+          grep -q 'Pi 5 benchmark: lane perception typically takes ~40 ms' src/laas_core/Config.hpp
+          grep -q '#include <sstream>' src/execution_control/Executive.cpp
+          grep -q 'std::ostringstream sched_line;' src/execution_control/Executive.cpp
+
+      - name: Commit source changes
+        run: |
+          if git diff --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/laas_core/Config.hpp \
+            src/execution_control/Executive.cpp
+          git commit -m 'perf(perception): run lane pipeline at sustainable 20Hz'
+          git push origin HEAD:step12-status-sync

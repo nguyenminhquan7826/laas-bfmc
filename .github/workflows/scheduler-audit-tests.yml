@@ -95,6 +95,9 @@ jobs:
           assert 'cameraThread=1' in text
           assert 'controlMissed=' in text
           assert 'controlMaxLateMs=' in text
+          assert 'perceptionMaxExecUs=' in text
+          assert 'perceptionMissed=' in text
+          assert 'config_.udp.enable_debug_stream' in text
           assert 'if (!user_run_request_.load())' in text
 
           logging_start = text.index('void Executive::loggingTick() const')
@@ -131,7 +134,22 @@ jobs:
           assert 'config.runtime.enable_uart = false;' in bench_profile
           assert 'config.runtime.enable_uart = true;' not in bench_profile
           assert 'config.runtime.enable_yolo_udp = bench_yolo_enabled;' in bench_profile
+          assert 'LAAS_PARKING_BENCH_DEBUG' in bench_profile
+          assert 'config.udp.enable_debug_stream = bench_debug_enabled;' in bench_profile
           assert '" UART=OFF"' in bench_profile
+          assert '" DEBUG="' in bench_profile
+
+          lane_core_hpp = Path('src/functional/perception/LaneDetectorCore.hpp').read_text()
+          lane_core_cpp = Path('src/functional/perception/LaneDetectorCore.cpp').read_text()
+          lane_wrapper = Path('src/functional/perception/LanePerceptionModule.cpp').read_text()
+          assert 'cv::Mat ipm_matrix_' in lane_core_hpp
+          assert 'ipm_matrix_ = cv::getPerspectiveTransform' in lane_core_cpp
+          apply_start = lane_core_cpp.index('cv::Mat LaneDetectorCore::applyIPM')
+          apply_end = lane_core_cpp.index('void LaneDetectorCore::slidingWindow', apply_start)
+          apply_ipm = lane_core_cpp[apply_start:apply_end]
+          assert 'cv::getPerspectiveTransform' not in apply_ipm
+          assert 'return warped;' in apply_ipm
+          assert 'input.frame_bgr.clone()' not in lane_wrapper
 
           assert 'configure_ai_affinity()' in ai_launcher
           assert 'best_AI.cv2.setNumThreads(1)' in ai_launcher
@@ -139,5 +157,5 @@ jobs:
           assert 'options.intra_op_num_threads = 2' in ai_detector
           assert 'options.inter_op_num_threads = 1' in ai_detector
 
-          print('[PASS] independent camera/control workers + cached remap + safe bench invariants')
+          print('[PASS] camera/control isolation + cached camera/IPM transforms + low-overhead bench debug policy + safety invariants')
           PY

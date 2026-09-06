@@ -80,13 +80,21 @@ def packed_grid(width: int, height: int, blocked: tuple[int, int]) -> bytes:
 
 
 class FullFootprintCollisionTests(unittest.TestCase):
-    def test_current_project_config_remains_point_mode(self) -> None:
+    def test_current_project_config_enables_verified_full_footprint(self) -> None:
         root = Path(__file__).resolve().parents[1]
         map_cfg = load_yaml(root / "map_v1.yaml")
         vehicle_cfg = load_yaml(root / "vehicle_v1.yaml")
         planner_cfg = load_yaml(root / "planner_v1.yaml")
         planner = HybridAStarPlanner(map_cfg, vehicle_cfg, planner_cfg)
-        self.assertEqual(planner.collision_mode, HybridAStarPlanner.POINT_COLLISION_MODE)
+
+        self.assertEqual(planner.collision_mode, HybridAStarPlanner.FULL_FOOTPRINT_MODE)
+        self.assertTrue(vehicle_cfg["geometry"]["footprint_verified"])
+        self.assertAlmostEqual(planner.vehicle_length, 0.350, places=9)
+        self.assertAlmostEqual(planner.vehicle_width, 0.210, places=9)
+        self.assertAlmostEqual(planner.wheelbase, 0.250, places=9)
+        self.assertAlmostEqual(planner.rear_overhang, 0.050, places=9)
+        self.assertAlmostEqual(planner.front_overhang, 0.050, places=9)
+        self.assertAlmostEqual(planner.body_center_from_rear_axle, 0.125, places=9)
 
     def test_full_footprint_rejects_unverified_geometry(self) -> None:
         with self.assertRaisesRegex(ValueError, "footprint_verified"):

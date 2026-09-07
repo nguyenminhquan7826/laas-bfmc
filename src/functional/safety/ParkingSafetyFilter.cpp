@@ -68,9 +68,11 @@ ControlCmdMsg ParkingSafetyFilter::filter(
     if (!config_.parking.enable) return stop("PARKING_DISABLED");
     if (!config_.parking.bench_mode) return stop("NON_BENCH_NOT_AUTHORIZED");
 
-    // Parking remains bench-only. This gate prevents accidental actuator use
-    // until the final real-vehicle validation phase is explicitly authorized.
-    if (config_.runtime.enable_uart) return stop("UART_MUST_BE_DISABLED_IN_BENCH");
+    // Parking remains bench-only. UART RX telemetry is allowed for physical
+    // pose validation, but UART TX / actuator commands are never authorized
+    // while parking remains in bench mode.
+    if (config_.runtime.enable_uart_tx)
+        return stop("UART_TX_MUST_BE_DISABLED_IN_BENCH");
     if (!server_connected) return stop("SERVER_DISCONNECTED");
 
     if (!raw_cmd.header.valid || !finiteCommand(raw_cmd))

@@ -47,7 +47,7 @@ steering:
     servo_relative_limit_deg: 30.0
     bicycle_steering_limit_deg: 22.835397
     max_table_fit_error_deg: 0.285
-    status: THESIS_BASELINE_PENDING_CURRENT_VEHICLE_WHEEL_ANGLE_VALIDATION
+    status: CURRENT_VEHICLE_MANUAL_SPOTCHECK_VALIDATED
 
   software_limit_deg: 22.835397
   planner_max_steering_deg: 22.835397
@@ -86,11 +86,11 @@ verification_status:
     symmetric_about_center: true
   steering_bicycle_mapping:
     status: THESIS_SHARED_PLATFORM_BASELINE
-    current_vehicle_direction_sign_validation: PENDING
-    current_vehicle_wheel_angle_validation: PENDING
+    current_vehicle_direction_sign_validation: PHYSICALLY_VERIFIED
+    current_vehicle_wheel_angle_validation: MANUAL_SPOTCHECK_MATCHES_THESIS_BASELINE
     actuation_authorized: false
   planner_max_steering:
-    status: THESIS_BASELINE_PENDING_CURRENT_VEHICLE_WHEEL_ANGLE_VALIDATION
+    status: CURRENT_VEHICLE_MANUAL_SPOTCHECK_VALIDATED
     current_value_deg: 22.835397
   full_footprint:
     status: GEOMETRY_MEASURED_SOFTWARE_COLLISION_ENABLED

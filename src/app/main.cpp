@@ -46,7 +46,28 @@ int main(int argc, char* argv[])
     // Enabled only when LAAS_PARKING_BENCH=1.
     const char* bench_env = std::getenv("LAAS_PARKING_BENCH");
 
-    if (bench_env && std::string(bench_env) == "1") {
+    // Physical telemetry / pose integration bench.
+    // This profile keeps parking actuation disabled while allowing real
+    // STM32 encoder + IMU telemetry to feed VehiclePoseEstimator.
+    const char* pose_bench_env =
+        std::getenv("LAAS_PARKING_POSE_BENCH");
+
+    const bool parking_bench_enabled =
+        bench_env && std::string(bench_env) == "1";
+
+    const bool parking_pose_bench_enabled =
+        pose_bench_env && std::string(pose_bench_env) == "1";
+
+    // Fail closed if two mutually exclusive parking bench profiles are
+    // accidentally enabled together.
+    if (parking_bench_enabled && parking_pose_bench_enabled) {
+        std::cerr
+            << "[APP] ERROR: LAAS_PARKING_BENCH and "
+            << "LAAS_PARKING_POSE_BENCH cannot both be enabled.\n";
+        return 3;
+    }
+
+    if (parking_bench_enabled) {
 
         // HARD safety gate: parking bench must never use UART.
         // No secondary bench option below is allowed to change this value.
@@ -128,6 +149,93 @@ int main(int argc, char* argv[])
             << ":"
             << config.parking.server_port
             << " pose=("
+            << config.parking.initial_x_m
+            << ","
+            << config.parking.initial_y_m
+            << ","
+            << config.parking.initial_yaw_rad
+            << ")"
+            << " FREE=P_B2"
+            << "\n";
+    }
+
+
+    if (parking_pose_bench_enabled) {
+
+        // Real STM32 telemetry is required for encoder + IMU pose estimation.
+        config.runtime.enable_uart = true;
+
+        // HARD safety gate: receive telemetry only.
+        // Parking/control commands must not be transmitted to STM32.
+        config.runtime.enable_uart_tx = false;
+
+        // Secondary safety state remains neutral-only even though TX is
+        // completely disabled above.
+        config.runtime.enable_uart_tx_neutral_only = true;
+
+        // Pose bench does not require YOLO or bird-eye debug traffic.
+        config.runtime.enable_yolo_udp = false;
+        config.udp.enable_debug_stream = false;
+
+        config.parking.enable = true;
+
+        // Keep all parking execution in bench semantics.
+        config.parking.bench_mode = true;
+        config.parking.enable_bench_parking_status = true;
+        config.parking.enable_bench_tracker = true;
+
+        // Real encoder + IMU telemetry drives VehiclePoseEstimator.
+        config.parking.enable_pose_estimator = true;
+
+        // Known initial rear-axle-center map pose.
+        // The IMU yaw at estimator startup becomes the relative yaw reference.
+        config.parking.initial_pose_valid = true;
+        config.parking.initial_x_m = 1.300;
+        config.parking.initial_y_m = 0.751;
+        config.parking.initial_yaw_rad = 0.0;
+
+        // Explicit parking occupancy used only for the planning bench.
+        config.parking.bench_p_b1 =
+            laas::ParkingSlotState::OCCUPIED;
+
+        config.parking.bench_p_b2 =
+            laas::ParkingSlotState::FREE;
+
+        config.parking.bench_p_t1 =
+            laas::ParkingSlotState::OCCUPIED;
+
+        config.parking.bench_p_t2 =
+            laas::ParkingSlotState::OCCUPIED;
+
+        const char* host =
+            std::getenv("LAAS_PARKING_SERVER_HOST");
+
+        if (host && *host) {
+            config.parking.server_host = host;
+        }
+
+        const char* port =
+            std::getenv("LAAS_PARKING_SERVER_PORT");
+
+        if (port && *port) {
+            const int value = std::atoi(port);
+
+            if (value > 0 && value <= 65535) {
+                config.parking.server_port = value;
+            }
+        }
+
+        std::cout
+            << "[APP][PARKING_POSE_BENCH]"
+            << " UART_RX=ON"
+            << " UART_TX=OFF"
+            << " POSE=ENCODER_IMU"
+            << " TRACKER=BENCH_ONLY"
+            << " server="
+            << config.parking.server_host
+            << ":"
+            << config.parking.server_port
+            << " initialPose=("
             << config.parking.initial_x_m
             << ","
             << config.parking.initial_y_m

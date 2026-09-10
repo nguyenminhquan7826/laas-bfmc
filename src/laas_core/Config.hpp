@@ -136,6 +136,10 @@ struct ParkingConfig {
     double initial_x_m = 0.0;
     double initial_y_m = 0.0;
     double initial_yaw_rad = 0.0;
+    // The tested STM32/IMU stream increases yaw for clockwise physical
+    // rotation. Convert it at the sensor boundary to the map's mathematical
+    // convention (counterclockwise-positive) before planning/tracking.
+    bool imu_yaw_positive_clockwise = true;
     int pose_max_integration_dt_ms = 200;
 };
 

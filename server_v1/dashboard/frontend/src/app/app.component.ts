@@ -82,8 +82,8 @@ export class AppComponent implements OnInit, OnDestroy {
     };
   }
 
-  degrees(radians: number | undefined): number | null {
-    return radians === undefined ? null : radians * 180 / Math.PI;
+  clockwiseDegrees(mapRadians: number | undefined): number | null {
+    return mapRadians === undefined ? null : -mapRadians * 180 / Math.PI;
   }
 
   slotState(slotId: string): string {

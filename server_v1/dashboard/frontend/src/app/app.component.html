@@ -43,7 +43,7 @@
         </div>
         <div class="map-footer">
           <span>{{ map?.width_x_m | number:'1.3-3' }} × {{ map?.height_y_m | number:'1.3-3' }} m</span>
-          <span>Frame: bottom-left / +X right / +Y up</span>
+          <span>Frame: bottom-left / Display yaw: +CW</span>
         </div>
       </article>
 
@@ -53,7 +53,7 @@
           <div class="metric-grid">
             <div><span>X</span><strong>{{ v.pose?.pose?.x_m | number:'1.3-3' }} m</strong></div>
             <div><span>Y</span><strong>{{ v.pose?.pose?.y_m | number:'1.3-3' }} m</strong></div>
-            <div><span>Yaw</span><strong>{{ degrees(v.pose?.pose?.yaw_rad) | number:'1.1-1' }}°</strong></div>
+            <div><span>Yaw +CW</span><strong>{{ clockwiseDegrees(v.pose?.pose?.yaw_rad) | number:'1.1-1' }}°</strong></div>
             <div><span>Age</span><strong>{{ v.pose?.server_receive_age_ms | number:'1.0-0' }} ms</strong></div>
           </div>
           <div class="line"><span>Source</span><b>{{ v.pose?.source ?? '—' }}</b></div>

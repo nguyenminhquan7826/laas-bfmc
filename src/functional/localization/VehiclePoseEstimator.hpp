@@ -7,8 +7,9 @@ namespace laas {
 
 // Provisional rear-axle-center map pose estimator for parking integration.
 // Position is dead-reckoned from signed encoder speed and yaw is aligned to the
-// map frame from the first valid IMU sample. This is not a replacement for a
-// final absolute localization system.
+// map frame from the first valid IMU sample. Clockwise-positive sensor yaw is
+// converted here to the map/planner counterclockwise-positive convention. This
+// is not a replacement for a final absolute localization system.
 class VehiclePoseEstimator {
 public:
     explicit VehiclePoseEstimator(const Config& config);

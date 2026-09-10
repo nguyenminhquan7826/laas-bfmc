@@ -76,9 +76,14 @@ bool VehiclePoseEstimator::process(const VehicleTelemetryMsg& telemetry,
         const std::uint64_t dt_ms = receive_ms - last_receive_timestamp_ms_;
         last_receive_timestamp_ms_ = receive_ms;
 
+        const double imu_yaw_delta =
+            wrapAngle(imu_yaw_rad - imu_reference_yaw_rad_);
+        const double map_yaw_delta =
+            config_.parking.imu_yaw_positive_clockwise
+                ? -imu_yaw_delta
+                : imu_yaw_delta;
         const double new_yaw = wrapAngle(
-            config_.parking.initial_yaw_rad +
-            wrapAngle(imu_yaw_rad - imu_reference_yaw_rad_));
+            config_.parking.initial_yaw_rad + map_yaw_delta);
 
         // Do not integrate position over a large telemetry gap. Updating the
         // yaw reference is safe; inventing a long travelled distance is not.

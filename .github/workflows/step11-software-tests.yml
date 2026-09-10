@@ -160,6 +160,18 @@ jobs:
       - name: Run parking tracker UART RX policy test
         run: /tmp/test_parking_tracker_uart_rx
 
+      - name: Build IMU/map yaw convention test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Iserver_v1/tests/cpp_stubs \
+            -Isrc \
+            server_v1/tests/test_vehicle_pose_estimator_yaw_convention.cpp \
+            src/functional/localization/VehiclePoseEstimator.cpp \
+            -o /tmp/test_vehicle_pose_estimator_yaw_convention
+
+      - name: Run IMU/map yaw convention test
+        run: /tmp/test_vehicle_pose_estimator_yaw_convention
+
   full-app-build:
     runs-on: ubuntu-latest
 

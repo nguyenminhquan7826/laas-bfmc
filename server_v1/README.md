@@ -62,6 +62,11 @@ STOP/HOLD layer.
 - Feature-flagged `navigation_decision` contract for Pi-owned Hybrid A*.
 - Standalone Pi local-planner worker with map verification and trajectory
   validation.
+- Asynchronous C++ bridge from `navigation_decision` to the Python Hybrid A*
+  worker, with timeout/output limits and no UART ownership.
+- Pi-side trajectory validation, tracker loading, read-only trajectory telemetry,
+  and server acknowledgement before the motion gate can leave HOLD.
+- Dashboard overlay showing the exact locally generated Hybrid A* path.
 
 ## Step 3: client-owned local planning
 
@@ -83,16 +88,27 @@ only when the hash matches its checked-in operational map. The local trajectory
 uses `trajectory_id == decision_id`, which makes monitoring and acknowledgements
 traceable across worker restarts.
 
-Current Step 3A integration boundary:
+Current Step 3B integration boundary:
 
-- Server decision, map package, C++ decoding/expected-identity check,
-  monitoring, and the standalone local Hybrid A* worker are implemented and
-  tested. The worker performs the actual on-disk checksum verification.
-- The C++ runtime deliberately enters `HOLD/LOCAL_PLANNER_PENDING` after accepting
-  a decision. Starting the Python worker asynchronously, loading its trajectory
-  into the C++ tracker, and reporting `READY/REJECTED` is Step 3B.
-- Therefore use `--planning-owner server` for the present end-to-end vehicle run.
-  Client mode is safe contract/integration testing only until Step 3B lands.
+- The C++ runtime starts the local worker asynchronously, so Hybrid A* never
+  blocks the 20 ms control loop. The worker hashes the real on-disk map package,
+  plans, and returns one NDJSON trajectory.
+- The Pi rechecks the target slot and trajectory, loads it into the existing
+  parking tracker, uploads `local_trajectory` for monitoring, then reports
+  `READY`. The server rejects `READY` unless that trajectory was already
+  received and validated.
+- All Step 3B profiles remain bench-safe: parking UART TX is still hard disabled.
+  Use `--planning-owner client` to exercise the client-owned path without
+  actuator output.
+
+Start `laas_pp` from the repository root because the local-worker paths are
+currently relative to that directory:
+
+```bash
+LAAS_PARKING_POSE_BENCH=1 \
+LAAS_PARKING_SERVER_HOST=<SERVER_IP> \
+./build/laas_pp pp
+```
 
 Run the Step 3 software tests from `server_v1`:
 
@@ -139,7 +155,9 @@ cd ../..
 Then open `http://127.0.0.1:5005/`. The dashboard exposes the latest
 protocol-validated Encoder-IMU pose, parking slots, trajectory/session status,
 tracker progress/error, safety gate, UART RX/TX policy, connection state, and
-receive age. SSE updates the screen every 500 ms; REST polling is the fallback.
+receive age. In client-owned mode it also draws the Pi-generated Hybrid A*
+trajectory in cyan. SSE updates the screen every 500 ms; REST polling is the
+fallback.
 
 For frontend development, keep the Python server on port 5005 and run:
 

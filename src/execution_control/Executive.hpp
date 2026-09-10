@@ -31,6 +31,7 @@
 #include "../logical_robot/UdpYoloInterface.hpp"
 #include "../logical_robot/UartVehicleInterface.hpp"
 #ifdef LAAS_ENABLE_PARKING_CLIENT
+#include "../logical_robot/LocalParkingPlannerWorker.hpp"
 #include "../logical_robot/ParkingServerClient.hpp"
 #include "../logical_robot/ParkingSessionSyncPolicy.hpp"
 #include "../logical_robot/ParkingSafetyEventSyncPolicy.hpp"
@@ -96,6 +97,11 @@ private:
 
     void parkingTrajectoryStatusSyncTick(
         const ParkingTrajectoryMsg& trajectory);
+
+    void startLocalParkingPlan(
+        const NavigationDecisionMsg& decision);
+
+    void pollLocalParkingPlanner();
 #endif
 
     void controlTick();
@@ -122,6 +128,7 @@ private:
     UartVehicleInterface vehicle_;
 #ifdef LAAS_ENABLE_PARKING_CLIENT
     ParkingServerClient parking_server_;
+    LocalParkingPlannerWorker local_parking_planner_worker_;
 #endif
 
     LanePerceptionModule lane_perception_;
@@ -207,6 +214,12 @@ private:
     std::string parking_session_sync_reason_{"NOT_CONNECTED"};
 
     ParkingTrajectoryStatusPolicy parking_trajectory_status_policy_;
+
+    NavigationDecisionMsg active_local_navigation_decision_;
+    bool local_planning_owned_active_{false};
+    bool local_ready_status_awaiting_ack_{false};
+    bool local_trajectory_telemetry_sent_{false};
+    bool local_ready_status_sent_{false};
 #endif
 };
 

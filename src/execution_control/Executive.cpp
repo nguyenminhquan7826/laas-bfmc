@@ -107,6 +107,29 @@ bool parkingSafetyReasonIsClear(
            reason == "GOAL_HOLD";
 }
 
+bool parkingTargetIsFree(
+    const ParkingStatusMsg& parking,
+    const std::string& target_slot)
+{
+    if (!parking.header.valid || target_slot.empty()) {
+        return false;
+    }
+    for (const ParkingSlotObservation& slot : parking.slots) {
+        if (slot.id == target_slot) {
+            return slot.state == ParkingSlotState::FREE;
+        }
+    }
+    return false;
+}
+
+std::string boundedProtocolReason(const std::string& reason)
+{
+    if (reason.empty()) {
+        return "unknown";
+    }
+    return reason.size() <= 160U ? reason : reason.substr(0U, 160U);
+}
+
 int getchNonBlocking()
 {
     termios oldt{};
@@ -187,6 +210,7 @@ Executive::Executive(const Config& config)
       vehicle_(config_),
 #ifdef LAAS_ENABLE_PARKING_CLIENT
       parking_server_(config_),
+      local_parking_planner_worker_(config_),
 #endif
       lane_perception_(config_),
       parking_status_bench_source_(config_),
@@ -251,6 +275,11 @@ bool Executive::init()
         parking_session_snapshot_received_ = false;
         parking_session_sync_hold_ = true;
         parking_session_sync_reason_ = "NOT_CONNECTED";
+        active_local_navigation_decision_ = NavigationDecisionMsg{};
+        local_planning_owned_active_ = false;
+        local_ready_status_awaiting_ack_ = false;
+        local_trajectory_telemetry_sent_ = false;
+        local_ready_status_sent_ = false;
     }
 #else
     if (config_.parking.enable) {
@@ -384,6 +413,7 @@ void Executive::stop()
     joinControlWorker();
     yolo_.close();
 #ifdef LAAS_ENABLE_PARKING_CLIENT
+    local_parking_planner_worker_.stop();
     parking_server_.close();
 #endif
     vehicle_.close();
@@ -768,6 +798,10 @@ void Executive::parkingNetworkTick()
         std::cout << "[PARKING][SYNC] connected -> HOLD awaiting session\n";
     }
 
+    // Hybrid A* runs in its own process/thread. Polling only moves an already
+    // completed result and never waits for the planner.
+    pollLocalParkingPlanner();
+
     // A disconnected socket is a hard session boundary. ParkingServerClient
     // purges decoded RX messages on disconnect; returning here is a second
     // guard so no stale snapshot can overwrite SERVER_DISCONNECTED/HOLD.
@@ -847,37 +881,7 @@ void Executive::parkingNetworkTick()
             }
         } else if (server_message.type ==
                    ParkingServerMessageType::NAVIGATION_DECISION) {
-            const NavigationDecisionMsg& decision =
-                server_message.navigation_decision;
-            const bool map_package_matches =
-                decision.map_package_sha256 ==
-                config_.parking.map_package_sha256;
-
-            parking_session_sync_hold_ = true;
-            if (!map_package_matches) {
-                parking_session_sync_reason_ =
-                    "LOCAL_MAP_PACKAGE_MISMATCH";
-                parking_server_.sendNavigationDecisionStatus(
-                    parking_status_tx_sequence_++, decision.decision_id,
-                    "REJECTED", parking_session_sync_reason_);
-                std::cerr
-                    << "[PARKING][LOCAL_PLAN] reject decision="
-                    << decision.decision_id
-                    << " reason=" << parking_session_sync_reason_ << "\n";
-            } else {
-                blackboard_.setNavigationDecision(decision);
-                parking_session_sync_reason_ =
-                    "LOCAL_PLANNER_PENDING";
-                parking_server_.sendNavigationDecisionStatus(
-                    parking_status_tx_sequence_++, decision.decision_id,
-                    "ACCEPTED", "MAP_PACKAGE_ID_MATCH_LOCAL_VERIFY_PENDING");
-                std::cout
-                    << "[PARKING][LOCAL_PLAN] accepted decision="
-                    << decision.decision_id
-                    << " maneuver=" << decision.maneuver
-                    << " target=" << decision.target_slot
-                    << " planner=" << decision.local_planner << "\n";
-            }
+            startLocalParkingPlan(server_message.navigation_decision);
         } else if (server_message.type == ParkingServerMessageType::PLANNING_RESULT) {
             std::cout << "[PARKING] planning_result=" << server_message.status
                       << " reason=" << server_message.reason << "\n";
@@ -888,6 +892,31 @@ void Executive::parkingNetworkTick()
             std::cerr << "[PARKING] protocol/network error: "
                       << server_message.reason << "\n";
         }
+    }
+
+    if (local_ready_status_awaiting_ack_ &&
+        !local_trajectory_telemetry_sent_ &&
+        active_local_navigation_decision_.decision_id > 0U) {
+        const ParkingTrajectoryMsg local = blackboard_.parkingTrajectory();
+        if (local.header.valid &&
+            local.trajectory_id ==
+                active_local_navigation_decision_.decision_id) {
+            local_trajectory_telemetry_sent_ =
+                parking_server_.sendLocalTrajectory(
+                    parking_status_tx_sequence_++,
+                    active_local_navigation_decision_, local);
+        }
+    }
+
+    if (local_ready_status_awaiting_ack_ &&
+        local_trajectory_telemetry_sent_ &&
+        !local_ready_status_sent_ &&
+        active_local_navigation_decision_.decision_id > 0U) {
+        local_ready_status_sent_ =
+            parking_server_.sendNavigationDecisionStatus(
+                parking_status_tx_sequence_++,
+                active_local_navigation_decision_.decision_id,
+                "READY", "LOCAL_HYBRID_A_STAR_PASS_PI_VALIDATED");
     }
 
     // applyParkingSessionSnapshot() reconciles queued safety events with
@@ -968,6 +997,210 @@ void Executive::parkingNetworkTick()
 
 
 #ifdef LAAS_ENABLE_PARKING_CLIENT
+void Executive::startLocalParkingPlan(
+    const NavigationDecisionMsg& decision)
+{
+    parking_session_sync_hold_ = true;
+
+    // A repeated delivery of the active decision is idempotent. The worker or
+    // the already validated trajectory keeps its state; a second process must
+    // never be launched for the same decision ID.
+    if (local_planning_owned_active_ &&
+        decision.decision_id ==
+            active_local_navigation_decision_.decision_id) {
+        parking_session_sync_reason_ = local_parking_planner_worker_.busy()
+            ? "LOCAL_PLANNER_RUNNING"
+            : "LOCAL_DECISION_ALREADY_ACTIVE";
+        std::cout << "[PARKING][LOCAL_PLAN] duplicate decision="
+                  << decision.decision_id << " ignored\n";
+        return;
+    }
+
+    // A different server decision supersedes all local state. Cancellation is
+    // bounded by the worker's 50 ms poll interval and occurs off the control
+    // loop used for actuator output.
+    local_parking_planner_worker_.stop();
+    clearLocalParkingTrajectory("NEW_LOCAL_NAVIGATION_DECISION");
+    local_planning_owned_active_ = false;
+    local_ready_status_awaiting_ack_ = false;
+    local_trajectory_telemetry_sent_ = false;
+    local_ready_status_sent_ = false;
+
+    auto reject = [this, &decision](const std::string& reason) {
+        parking_session_sync_reason_ = reason;
+        parking_server_.sendNavigationDecisionStatus(
+            parking_status_tx_sequence_++, decision.decision_id,
+            "REJECTED", boundedProtocolReason(reason));
+        std::cerr << "[PARKING][LOCAL_PLAN] reject decision="
+                  << decision.decision_id
+                  << " reason=" << reason << "\n";
+    };
+
+    if (decision.map_package_sha256 !=
+        config_.parking.map_package_sha256) {
+        reject("LOCAL_MAP_PACKAGE_MISMATCH");
+        return;
+    }
+    if (!config_.parking.enable_local_parking_planner) {
+        reject("LOCAL_PLANNER_DISABLED");
+        return;
+    }
+    if (local_parking_planner_worker_.busy()) {
+        reject("LOCAL_PLANNER_BUSY");
+        return;
+    }
+
+    const VehiclePoseMsg pose = blackboard_.vehiclePose();
+    const ParkingStatusMsg parking = blackboard_.parkingStatus();
+    if (!parkingTargetIsFree(parking, decision.target_slot)) {
+        reject("LOCAL_TARGET_SLOT_NOT_FREE");
+        return;
+    }
+
+    std::string request_line;
+    std::string encode_reason;
+    if (!ParkingProtocol::encodeLocalPlanningRequest(
+            decision, pose, parking, request_line, encode_reason)) {
+        reject("LOCAL_REQUEST_" + encode_reason);
+        return;
+    }
+
+    std::string start_reason;
+    if (!local_parking_planner_worker_.start(
+            decision.decision_id, request_line, start_reason)) {
+        reject("LOCAL_WORKER_" + start_reason);
+        return;
+    }
+
+    active_local_navigation_decision_ = decision;
+    local_planning_owned_active_ = true;
+    local_ready_status_awaiting_ack_ = false;
+    local_trajectory_telemetry_sent_ = false;
+    local_ready_status_sent_ = false;
+    blackboard_.setNavigationDecision(decision);
+    parking_session_sync_reason_ = "LOCAL_PLANNER_RUNNING";
+
+    parking_server_.sendNavigationDecisionStatus(
+        parking_status_tx_sequence_++, decision.decision_id,
+        "ACCEPTED", "MAP_PACKAGE_ID_MATCH_LOCAL_VERIFY_PENDING");
+    parking_server_.sendNavigationDecisionStatus(
+        parking_status_tx_sequence_++, decision.decision_id,
+        "PLANNING", "LOCAL_HYBRID_A_STAR_RUNNING");
+
+    std::cout << "[PARKING][LOCAL_PLAN] start decision="
+              << decision.decision_id
+              << " maneuver=" << decision.maneuver
+              << " target=" << decision.target_slot
+              << " worker=ASYNC\n";
+}
+
+void Executive::pollLocalParkingPlanner()
+{
+    LocalParkingPlannerProcessResult process;
+    if (!local_parking_planner_worker_.poll(process)) {
+        return;
+    }
+
+    auto reject = [this, &process](const std::string& reason) {
+        parking_session_sync_hold_ = true;
+        parking_session_sync_reason_ = reason;
+        clearLocalParkingTrajectory(reason);
+        local_ready_status_awaiting_ack_ = false;
+        local_trajectory_telemetry_sent_ = false;
+        local_ready_status_sent_ = false;
+        local_planning_owned_active_ = false;
+        if (parking_server_connected_ && process.decision_id > 0U) {
+            parking_server_.sendNavigationDecisionStatus(
+                parking_status_tx_sequence_++, process.decision_id,
+                "REJECTED", boundedProtocolReason(reason));
+        }
+        std::cerr << "[PARKING][LOCAL_PLAN] result=REJECT decision="
+                  << process.decision_id << " reason=" << reason << "\n";
+    };
+
+    if (!local_planning_owned_active_ ||
+        process.decision_id !=
+            active_local_navigation_decision_.decision_id) {
+        reject("LOCAL_RESULT_DECISION_MISMATCH");
+        return;
+    }
+    if (process.timed_out || process.output.empty()) {
+        reject(process.reason.empty()
+                   ? "LOCAL_PLANNER_EMPTY_OUTPUT"
+                   : process.reason);
+        return;
+    }
+
+    std::string line = process.output;
+    while (!line.empty() &&
+           (line.back() == '\n' || line.back() == '\r')) {
+        line.pop_back();
+    }
+    if (line.find('\n') != std::string::npos) {
+        reject("LOCAL_PLANNER_MULTILINE_OUTPUT");
+        return;
+    }
+
+    ParkingServerMessage decoded;
+    std::string decode_reason;
+    if (!ParkingProtocol::decodeServerLine(
+            line, config_.parking.map_id, decoded, decode_reason)) {
+        reject("LOCAL_OUTPUT_" + decode_reason);
+        return;
+    }
+    if (decoded.type == ParkingServerMessageType::PLANNING_RESULT) {
+        reject("LOCAL_HYBRID_A_STAR_" + decoded.reason);
+        return;
+    }
+    if (process.exit_code != 0 ||
+        decoded.type != ParkingServerMessageType::TRAJECTORY) {
+        reject(process.reason == "ok"
+                   ? "LOCAL_OUTPUT_NOT_TRAJECTORY"
+                   : process.reason);
+        return;
+    }
+
+    ParkingTrajectoryMsg trajectory = decoded.trajectory;
+    if (trajectory.trajectory_id != process.decision_id ||
+        trajectory.target_slot !=
+            active_local_navigation_decision_.target_slot ||
+        trajectory.map_package_sha256 !=
+            active_local_navigation_decision_.map_package_sha256 ||
+        trajectory.planning_owner != "client") {
+        reject("LOCAL_TRAJECTORY_DECISION_CONTRACT_MISMATCH");
+        return;
+    }
+
+    const ParkingStatusMsg parking = blackboard_.parkingStatus();
+    if (!parkingTargetIsFree(parking, trajectory.target_slot)) {
+        reject("LOCAL_TARGET_CHANGED_BEFORE_ACTIVATION");
+        return;
+    }
+
+    const VehiclePoseMsg current_pose = blackboard_.vehiclePose();
+    const ParkingTrajectoryValidationResult validation =
+        parking_trajectory_validator_.validate(trajectory, current_pose);
+    if (!validation.accepted) {
+        reject("LOCAL_TRAJECTORY_REJECTED_" + validation.reason);
+        return;
+    }
+
+    blackboard_.setParkingTrajectory(trajectory);
+    parking_trajectory_status_policy_.onTrajectoryReceived(
+        trajectory.trajectory_id);
+    local_ready_status_awaiting_ack_ = true;
+    local_trajectory_telemetry_sent_ = false;
+    local_ready_status_sent_ = false;
+    parking_session_sync_hold_ = true;
+    parking_session_sync_reason_ =
+        "LOCAL_TRAJECTORY_READY_AWAITING_SERVER_ACK";
+
+    std::cout << "[PARKING][LOCAL_PLAN] result=READY decision="
+              << process.decision_id
+              << " points=" << trajectory.points.size()
+              << " PiCheck=" << validation.reason << "\n";
+}
+
 void Executive::discardParkingSafetyEventsForTrajectory(
     std::uint64_t trajectory_id,
     const std::string& reason)
@@ -1054,15 +1287,40 @@ void Executive::clearLocalParkingTrajectory(
 void Executive::applyParkingSessionSnapshot(
     const ParkingSessionSnapshot& session)
 {
-    reconcileParkingSafetyEventsWithSession(session);
     parking_session_snapshot_received_ = true;
 
     const ParkingTrajectoryMsg local = blackboard_.parkingTrajectory();
+
+    // Between local validation and the READY acknowledgement, older ACKs may
+    // still contain WAITING_INPUT. They must not erase the newly generated
+    // trajectory; motion remains held until Server echoes the same ID.
+    if (local_planning_owned_active_ &&
+        local_ready_status_awaiting_ack_ &&
+        local.header.valid && local.trajectory_id > 0U &&
+        (!session.has_active_trajectory ||
+         session.active_trajectory_id != local.trajectory_id)) {
+        parking_session_sync_hold_ = true;
+        parking_session_sync_reason_ =
+            "LOCAL_TRAJECTORY_READY_AWAITING_SERVER_ACK";
+        return;
+    }
+
+    reconcileParkingSafetyEventsWithSession(session);
     const ParkingSessionSyncDecision decision =
         ParkingSessionSyncPolicy::evaluate(session, local);
 
     parking_session_sync_hold_ = decision.hold_motion;
     parking_session_sync_reason_ = decision.reason;
+
+    if (local_planning_owned_active_ &&
+        local_ready_status_awaiting_ack_ &&
+        session.has_active_trajectory &&
+        local.header.valid &&
+        session.active_trajectory_id == local.trajectory_id) {
+        local_ready_status_awaiting_ack_ = false;
+        local_trajectory_telemetry_sent_ = false;
+        local_ready_status_sent_ = false;
+    }
 
     if (decision.clear_local_trajectory) {
         clearLocalParkingTrajectory(decision.reason);

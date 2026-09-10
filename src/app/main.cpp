@@ -97,6 +97,7 @@ int main(int argc, char* argv[])
 
         config.parking.enable_bench_parking_status = true;
         config.parking.enable_bench_tracker = true;
+        config.parking.enable_local_parking_planner = true;
 
         // No encoder/IMU telemetry in this bench build.
         config.parking.enable_pose_estimator = false;
@@ -183,6 +184,7 @@ int main(int argc, char* argv[])
         config.parking.bench_mode = true;
         config.parking.enable_bench_parking_status = true;
         config.parking.enable_bench_tracker = true;
+        config.parking.enable_local_parking_planner = true;
 
         // Real encoder + IMU telemetry drives VehiclePoseEstimator.
         config.parking.enable_pose_estimator = true;

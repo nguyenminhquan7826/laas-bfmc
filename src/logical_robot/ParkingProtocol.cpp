@@ -498,6 +498,163 @@ bool ParkingProtocol::encodeNavigationDecisionStatus(
     return !line.empty();
 }
 
+bool ParkingProtocol::encodeLocalPlanningRequest(
+    const NavigationDecisionMsg& decision,
+    const VehiclePoseMsg& pose,
+    const ParkingStatusMsg& parking,
+    std::string& line,
+    std::string& reason)
+{
+    if (!decision.header.valid || decision.decision_id == 0U ||
+        decision.map_id.empty() || decision.map_package_sha256.size() != 64U ||
+        decision.maneuver != "PARK_AT_SLOT" || decision.target_slot.empty() ||
+        !pose.header.valid || pose.map_id != decision.map_id ||
+        !finite(pose.x_m) || !finite(pose.y_m) || !finite(pose.yaw_rad) ||
+        !parking.header.valid || parking.map_id != decision.map_id ||
+        parking.slots.empty()) {
+        reason = "invalid_local_planning_request";
+        return false;
+    }
+
+    json_object* root = json_object_new_object();
+    addUnsigned(root, "source_seq", decision.source_seq);
+
+    json_object* decision_object = json_object_new_object();
+    addUnsigned(decision_object, "decision_id", decision.decision_id);
+    json_object_object_add(
+        decision_object, "map_id",
+        json_object_new_string(decision.map_id.c_str()));
+    json_object_object_add(
+        decision_object, "map_package_sha256",
+        json_object_new_string(decision.map_package_sha256.c_str()));
+    json_object_object_add(
+        decision_object, "planning_owner",
+        json_object_new_string(decision.planning_owner.c_str()));
+    json_object_object_add(
+        decision_object, "maneuver",
+        json_object_new_string(decision.maneuver.c_str()));
+    json_object_object_add(
+        decision_object, "target_slot",
+        json_object_new_string(decision.target_slot.c_str()));
+    json_object_object_add(
+        decision_object, "local_planner",
+        json_object_new_string(decision.local_planner.c_str()));
+    json_object_object_add(root, "decision", decision_object);
+
+    json_object* pose_object = json_object_new_object();
+    json_object_object_add(pose_object, "x_m", json_object_new_double(pose.x_m));
+    json_object_object_add(pose_object, "y_m", json_object_new_double(pose.y_m));
+    json_object_object_add(
+        pose_object, "yaw_rad", json_object_new_double(pose.yaw_rad));
+    json_object_object_add(root, "pose", pose_object);
+
+    json_object* slots = json_object_new_array();
+    std::set<std::string> ids;
+    for (const ParkingSlotObservation& slot : parking.slots) {
+        if (slot.id.empty() || !ids.insert(slot.id).second) {
+            json_object_put(slots);
+            json_object_put(root);
+            reason = "invalid_local_planning_slots";
+            return false;
+        }
+        json_object* item = json_object_new_object();
+        json_object_object_add(
+            item, "id", json_object_new_string(slot.id.c_str()));
+        json_object_object_add(
+            item, "state",
+            json_object_new_string(slotStateToString(slot.state)));
+        json_object_object_add(
+            item, "confidence", json_object_new_double(slot.confidence));
+        json_object_array_add(slots, item);
+    }
+    json_object_object_add(root, "slots", slots);
+
+    line = dumpJson(root);
+    json_object_put(root);
+    reason = line.empty() ? "json_encode_failed" : "ok";
+    return !line.empty();
+}
+
+bool ParkingProtocol::encodeLocalTrajectoryTelemetry(
+    std::uint64_t sequence,
+    std::uint64_t timestamp_ms,
+    const NavigationDecisionMsg& decision,
+    const ParkingTrajectoryMsg& trajectory,
+    std::string& line,
+    std::string& reason)
+{
+    if (decision.decision_id == 0U ||
+        decision.decision_id != trajectory.trajectory_id ||
+        decision.map_id != trajectory.map_id ||
+        decision.target_slot != trajectory.target_slot ||
+        decision.map_package_sha256.size() != 64U ||
+        !trajectory.header.valid || trajectory.protocol_version != kVersion ||
+        trajectory.reference_point != "rear_axle_center" ||
+        trajectory.validation != "PASS" || trajectory.points.size() < 2U) {
+        reason = "invalid_local_trajectory_telemetry";
+        return false;
+    }
+
+    json_object* object = makeBase("local_trajectory");
+    addUnsigned(object, "seq", sequence);
+    addUnsigned(object, "timestamp_ms", timestamp_ms);
+    addUnsigned(object, "decision_id", decision.decision_id);
+    addUnsigned(object, "trajectory_id", trajectory.trajectory_id);
+    addUnsigned(object, "source_seq", trajectory.source_seq);
+    json_object_object_add(
+        object, "map_id", json_object_new_string(trajectory.map_id.c_str()));
+    json_object_object_add(
+        object, "map_package_sha256",
+        json_object_new_string(decision.map_package_sha256.c_str()));
+    json_object_object_add(
+        object, "planning_owner", json_object_new_string("client"));
+    json_object_object_add(
+        object, "target_slot",
+        json_object_new_string(trajectory.target_slot.c_str()));
+    json_object_object_add(
+        object, "reference_point",
+        json_object_new_string(trajectory.reference_point.c_str()));
+    json_object_object_add(
+        object, "goal_mode",
+        json_object_new_string(trajectory.goal_mode.c_str()));
+    json_object_object_add(
+        object, "validation",
+        json_object_new_string(trajectory.validation.c_str()));
+    json_object_object_add(
+        object, "prototype_warning",
+        json_object_new_string(trajectory.prototype_warning.c_str()));
+
+    json_object* points = json_object_new_array();
+    for (const ParkingTrajectoryPoint& point : trajectory.points) {
+        if (!finite(point.x_m) || !finite(point.y_m) ||
+            !finite(point.yaw_rad) || !finite(point.v_ref_mps)) {
+            json_object_put(points);
+            json_object_put(object);
+            reason = "invalid_local_trajectory_point";
+            return false;
+        }
+        json_object* item = json_object_new_object();
+        json_object_object_add(item, "x_m", json_object_new_double(point.x_m));
+        json_object_object_add(item, "y_m", json_object_new_double(point.y_m));
+        json_object_object_add(
+            item, "yaw_rad", json_object_new_double(point.yaw_rad));
+        json_object_object_add(
+            item, "v_ref_mps", json_object_new_double(point.v_ref_mps));
+        json_object_object_add(
+            item, "direction",
+            json_object_new_string(
+                point.direction == MotionDirection::FORWARD
+                    ? "FORWARD" : "REVERSE"));
+        json_object_array_add(points, item);
+    }
+    json_object_object_add(object, "points", points);
+
+    line = dumpJson(object);
+    json_object_put(object);
+    reason = line.empty() ? "json_encode_failed" : "ok";
+    return !line.empty();
+}
+
 bool ParkingProtocol::decodeServerLine(const std::string& line,
                                        const std::string& expected_map_id,
                                        ParkingServerMessage& out,
@@ -676,6 +833,25 @@ bool ParkingProtocol::decodeServerLine(const std::string& line,
         return false;
     }
     trajectory.map_id = out.map_id;
+
+    json_object* package_hash = nullptr;
+    if (getField(object, "map_package_sha256", package_hash)) {
+        if (!getString(
+                object, "map_package_sha256",
+                trajectory.map_package_sha256)) {
+            json_object_put(object);
+            reason = "invalid_trajectory_map_package_sha256";
+            return false;
+        }
+    }
+    json_object* planning_owner = nullptr;
+    if (getField(object, "planning_owner", planning_owner)) {
+        if (!getString(object, "planning_owner", trajectory.planning_owner)) {
+            json_object_put(object);
+            reason = "invalid_trajectory_planning_owner";
+            return false;
+        }
+    }
 
     if (trajectory.reference_point != "rear_axle_center" ||
         trajectory.validation != "PASS") {

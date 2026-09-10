@@ -98,6 +98,18 @@ struct ParkingConfig {
     std::string vehicle_id = "car_01";
     int monitoring_status_period_ms = 200;
 
+    // Step-3B local Hybrid A* process bridge. Relative paths are resolved from
+    // the directory where laas_pp is started (normally the repository root).
+    bool enable_local_parking_planner = false;
+    std::string local_planner_python = "python3";
+    std::string local_planner_script =
+        "server_v1/local_parking_planner_v1.py";
+    std::string local_planner_root = "server_v1";
+    int local_planner_timeout_ms = 15000;
+    // Keep the result below the 64 KiB TCP/NDJSON frame limit so the exact
+    // trajectory can also be mirrored to monitoring without truncation.
+    int local_planner_max_output_bytes = 60000;
+
     // Pi-side trajectory contract checks. These are integration defaults, not
     // final real-vehicle safety thresholds.
     float max_parking_speed_mps = 0.10f;

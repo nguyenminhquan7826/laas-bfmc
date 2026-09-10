@@ -98,6 +98,20 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.vehicle?.trajectory?.[key] ?? null;
   }
 
+  localTrajectoryPolyline(): string | null {
+    const points = this.vehicle?.local_trajectory?.points;
+    if (!points?.length || !this.map?.width_x_m || !this.map.height_y_m) {
+      return null;
+    }
+    return points.map(point => {
+      const x = Math.max(0, Math.min(1000,
+        point.x_m / this.map!.width_x_m * 1000));
+      const y = Math.max(0, Math.min(1000,
+        (1 - point.y_m / this.map!.height_y_m) * 1000));
+      return `${x},${y}`;
+    }).join(' ');
+  }
+
   safetyValue(key: string): unknown {
     return this.vehicle?.safety?.[key] ?? null;
   }

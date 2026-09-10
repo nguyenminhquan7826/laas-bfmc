@@ -111,6 +111,7 @@ if(LAAS_PARKING_CLIENT_AVAILABLE)
 
         src/logical_robot/ParkingProtocol.cpp
         src/logical_robot/ParkingServerClient.cpp
+        src/logical_robot/LocalParkingPlannerWorker.cpp
     )
 endif()
 

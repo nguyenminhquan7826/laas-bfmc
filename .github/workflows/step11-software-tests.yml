@@ -111,6 +111,19 @@ jobs:
       - name: Run navigation decision protocol test
         run: /tmp/test_navigation_decision_protocol
 
+      - name: Build asynchronous local planner worker test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Iserver_v1/tests/cpp_stubs \
+            -Isrc \
+            server_v1/tests/test_local_parking_planner_worker.cpp \
+            src/logical_robot/LocalParkingPlannerWorker.cpp \
+            -pthread \
+            -o /tmp/test_local_parking_planner_worker
+
+      - name: Run asynchronous local planner worker test
+        run: /tmp/test_local_parking_planner_worker
+
   step12-policies:
     runs-on: ubuntu-latest
 

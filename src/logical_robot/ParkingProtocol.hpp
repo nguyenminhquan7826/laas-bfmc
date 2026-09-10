@@ -93,6 +93,19 @@ public:
         const std::string& reason_text,
         std::string& line,
         std::string& reason);
+    static bool encodeLocalPlanningRequest(
+        const NavigationDecisionMsg& decision,
+        const VehiclePoseMsg& pose,
+        const ParkingStatusMsg& parking,
+        std::string& line,
+        std::string& reason);
+    static bool encodeLocalTrajectoryTelemetry(
+        std::uint64_t sequence,
+        std::uint64_t timestamp_ms,
+        const NavigationDecisionMsg& decision,
+        const ParkingTrajectoryMsg& trajectory,
+        std::string& line,
+        std::string& reason);
 
     static bool decodeServerLine(const std::string& line,
                                  const std::string& expected_map_id,

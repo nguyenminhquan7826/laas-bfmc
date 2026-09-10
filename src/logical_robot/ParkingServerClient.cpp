@@ -346,6 +346,17 @@ bool ParkingServerClient::sendNavigationDecisionStatus(
            queueLine(line);
 }
 
+bool ParkingServerClient::sendLocalTrajectory(
+    std::uint64_t sequence,
+    const NavigationDecisionMsg& decision,
+    const ParkingTrajectoryMsg& trajectory)
+{
+    std::string line, reason;
+    return ParkingProtocol::encodeLocalTrajectoryTelemetry(
+               sequence, nowMs(), decision, trajectory, line, reason) &&
+           queueLine(line);
+}
+
 bool ParkingServerClient::popMessage(ParkingServerMessage& out)
 {
     if (rx_messages_.empty()) {

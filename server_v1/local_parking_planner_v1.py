@@ -129,6 +129,11 @@ def main() -> None:
         default=Path(__file__).resolve().parent,
         help="directory containing map_manifest_v1.json and map package files",
     )
+    parser.add_argument(
+        "--protocol-output",
+        action="store_true",
+        help="emit a standard trajectory/planning_result for the C++ bridge",
+    )
     args = parser.parse_args()
     raw = sys.stdin.readline()
     try:
@@ -140,7 +145,25 @@ def main() -> None:
         result = _failure("request_not_object")
     else:
         result = plan_local_request(args.root.resolve(), request)
-    print(json.dumps(result, separators=(",", ":"), allow_nan=False), flush=True)
+    output = result
+    if args.protocol_output:
+        if result.get("status") == "READY":
+            output = dict(result["trajectory"])
+            output["decision_id"] = result["decision_id"]
+            output["map_package_sha256"] = result["map_package_sha256"]
+            output["planning_owner"] = "client"
+        else:
+            decision = request.get("decision", {}) if isinstance(request, dict) else {}
+            output = {
+                "type": "planning_result",
+                "version": 1,
+                "map_id": decision.get("map_id", "map_v1"),
+                "source_seq": request.get("source_seq") if isinstance(request, dict) else None,
+                "decision_id": result.get("decision_id"),
+                "status": "LOCAL_PLANNING_REJECTED",
+                "reason": result.get("reason", "local_planning_rejected"),
+            }
+    print(json.dumps(output, separators=(",", ":"), allow_nan=False), flush=True)
     raise SystemExit(0 if result.get("status") == "READY" else 1)
 
 

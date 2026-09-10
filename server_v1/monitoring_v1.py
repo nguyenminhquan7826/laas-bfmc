@@ -69,6 +69,7 @@ class VehicleStateStore:
             "runtime": None,
             "navigation": None,
             "navigation_status": None,
+            "local_trajectory": None,
             "session": None,
         }
 
@@ -166,6 +167,8 @@ class VehicleStateStore:
                 vehicle["runtime"] = received
             elif msg_type == "navigation_decision_status":
                 vehicle["navigation_status"] = received
+            elif msg_type == "local_trajectory":
+                vehicle["local_trajectory"] = received
 
             if session is not None:
                 vehicle["session"] = copy.deepcopy(session)
@@ -251,6 +254,9 @@ class VehicleStateStore:
             ),
             "navigation_status": self._message_snapshot(
                 vehicle["navigation_status"], now_mono
+            ),
+            "local_trajectory": self._message_snapshot(
+                vehicle["local_trajectory"], now_mono
             ),
             "session": copy.deepcopy(vehicle["session"]),
         }

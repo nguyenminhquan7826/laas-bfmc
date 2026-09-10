@@ -38,6 +38,11 @@
         </div>
         <div class="map-stage" [class.no-pose]="!v.pose?.pose">
           <img [src]="mapImageUrl" alt="Bản đồ BFMC map_v1">
+          <svg *ngIf="localTrajectoryPolyline() as polyline"
+               class="trajectory-overlay" viewBox="0 0 1000 1000"
+               preserveAspectRatio="none" aria-label="Quỹ đạo Hybrid A* do Pi lập">
+            <polyline [attr.points]="polyline"></polyline>
+          </svg>
           <div class="car-marker" [ngStyle]="poseMarkerStyle()"><span></span></div>
           <p *ngIf="!v.pose?.pose" class="map-message">Chưa có pose hợp lệ</p>
         </div>
@@ -66,6 +71,7 @@
           <div class="line"><span>Target</span><b>{{ navigation.target_slot }}</b></div>
           <div class="line"><span>Local planner</span><b>{{ navigation.local_planner }}</b></div>
           <div class="line"><span>Pi status</span><b>{{ v.navigation_status?.status ?? 'PENDING' }}</b></div>
+          <div class="line"><span>Local trajectory</span><b>{{ v.local_trajectory ? ('#' + v.local_trajectory.trajectory_id + ' · ' + (v.local_trajectory.points?.length ?? 0) + ' pts') : '—' }}</b></div>
           <div class="line"><span>Map package</span><b>{{ shortHash(navigation.map_package_sha256) }}</b></div>
         </article>
 

@@ -39,6 +39,10 @@ public:
         std::uint64_t decision_id,
         const std::string& status,
         const std::string& reason_text);
+    bool sendLocalTrajectory(
+        std::uint64_t sequence,
+        const NavigationDecisionMsg& decision,
+        const ParkingTrajectoryMsg& trajectory);
 
     bool popMessage(ParkingServerMessage& out);
 

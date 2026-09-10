@@ -37,6 +37,19 @@ export interface SessionSnapshot {
   pause_reason?: string | null;
 }
 
+export interface LocalTrajectoryMessage {
+  trajectory_id: number;
+  target_slot: string;
+  validation?: string;
+  points?: Array<{
+    x_m: number;
+    y_m: number;
+    yaw_rad: number;
+    v_ref_mps: number;
+    direction: number;
+  }>;
+}
+
 export interface VehicleStatus {
   vehicle_id: string;
   connected: boolean;
@@ -47,6 +60,7 @@ export interface VehicleStatus {
   pose?: PoseMessage | null;
   parking?: ParkingMessage | null;
   trajectory?: Record<string, unknown> | null;
+  local_trajectory?: LocalTrajectoryMessage | null;
   safety?: Record<string, unknown> | null;
   runtime?: RuntimeMessage | null;
   navigation?: {

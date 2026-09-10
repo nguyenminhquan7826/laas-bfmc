@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -91,6 +92,44 @@ class MapPackageAndLocalPlannerTests(unittest.TestCase):
         self.assertEqual(result["trajectory"]["validation"], "PASS")
         self.assertGreater(len(result["trajectory"]["points"]), 1)
 
+    def test_protocol_output_emits_standard_trajectory_for_cpp_bridge(self) -> None:
+        manifest = load_and_verify_manifest(SERVER_DIR)
+        request = {
+            "source_seq": 10,
+            "decision": {
+                "decision_id": 9,
+                "map_id": "map_v1",
+                "map_package_sha256": manifest["package_sha256"],
+                "maneuver": "PARK_AT_SLOT",
+                "target_slot": "P_B2",
+            },
+            "pose": {"x_m": 1.3, "y_m": 0.751, "yaw_rad": 0.0},
+            "slots": slots(),
+        }
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SERVER_DIR / "local_parking_planner_v1.py"),
+                "--root",
+                str(SERVER_DIR),
+                "--protocol-output",
+            ],
+            input=json.dumps(request) + "\n",
+            text=True,
+            capture_output=True,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        trajectory = json.loads(completed.stdout)
+        self.assertEqual(trajectory["type"], "trajectory")
+        self.assertEqual(trajectory["trajectory_id"], 9)
+        self.assertEqual(trajectory["decision_id"], 9)
+        self.assertEqual(trajectory["planning_owner"], "client")
+        self.assertEqual(
+            trajectory["map_package_sha256"], manifest["package_sha256"]
+        )
+
 
 class ClientOwnedServerModeTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -158,6 +197,100 @@ class ClientOwnedServerModeTests(unittest.TestCase):
         monitored = self.ctx.monitoring.vehicle_snapshot("car_01")
         self.assertEqual(monitored["navigation"]["decision_id"], decision["decision_id"])
         self.assertEqual(monitored["navigation_status"]["status"], "ACCEPTED")
+
+        self.send({
+            "type": "navigation_decision_status",
+            "version": 1,
+            "vehicle_id": "car_01",
+            "seq": 13,
+            "timestamp_ms": 1013,
+            "map_id": "map_v1",
+            "decision_id": decision["decision_id"],
+            "status": "PLANNING",
+            "reason": "LOCAL_HYBRID_A_STAR_RUNNING",
+        })
+        self.assertTrue(self.receive()["accepted"])
+
+        # READY is not authoritative by itself: the Server must have received
+        # and validated the Pi-owned trajectory first.
+        self.send({
+            "type": "navigation_decision_status",
+            "version": 1,
+            "vehicle_id": "car_01",
+            "seq": 14,
+            "timestamp_ms": 1014,
+            "map_id": "map_v1",
+            "decision_id": decision["decision_id"],
+            "status": "READY",
+            "reason": "LOCAL_HYBRID_A_STAR_PASS_PI_VALIDATED",
+        })
+        premature_ready = self.receive()
+        self.assertFalse(premature_ready["accepted"], premature_ready)
+        self.assertEqual(
+            premature_ready["reason"],
+            "local_trajectory_missing_before_ready",
+        )
+
+        local_request = {
+            "source_seq": decision["source_seq"],
+            "decision": decision,
+            "pose": {"x_m": 1.3, "y_m": 0.751, "yaw_rad": 0.0},
+            "slots": slots(),
+        }
+        local_result = plan_local_request(SERVER_DIR, local_request)
+        self.assertEqual(local_result["status"], "READY", local_result)
+        local_trajectory = dict(local_result["trajectory"])
+        local_trajectory.update({
+            "type": "local_trajectory",
+            "seq": 15,
+            "timestamp_ms": 1015,
+            "decision_id": decision["decision_id"],
+            "map_package_sha256": decision["map_package_sha256"],
+            "planning_owner": "client",
+        })
+
+        wrong_map_trajectory = dict(local_trajectory)
+        wrong_map_trajectory["map_package_sha256"] = "0" * 64
+        self.send(wrong_map_trajectory)
+        wrong_map_ack = self.receive()
+        self.assertFalse(wrong_map_ack["accepted"], wrong_map_ack)
+        self.assertEqual(
+            wrong_map_ack["reason"],
+            "local_trajectory_map_package_mismatch",
+        )
+
+        local_trajectory["seq"] = 16
+        local_trajectory["timestamp_ms"] = 1016
+        self.send(local_trajectory)
+        trajectory_ack = self.receive()
+        self.assertTrue(trajectory_ack["accepted"], trajectory_ack)
+
+        self.send({
+            "type": "navigation_decision_status",
+            "version": 1,
+            "vehicle_id": "car_01",
+            "seq": 17,
+            "timestamp_ms": 1017,
+            "map_id": "map_v1",
+            "decision_id": decision["decision_id"],
+            "status": "READY",
+            "reason": "LOCAL_HYBRID_A_STAR_PASS_PI_VALIDATED",
+        })
+        ack = self.receive()
+        self.assertTrue(ack["accepted"], ack)
+
+        self.assertEqual(ack["session"]["state"], "TRAJECTORY_READY")
+        self.assertEqual(
+            ack["session"]["active_trajectory_id"], decision["decision_id"]
+        )
+        self.assertEqual(ack["session"]["target_slot"], "P_B2")
+        monitored = self.ctx.monitoring.vehicle_snapshot("car_01")
+        self.assertEqual(monitored["navigation_status"]["status"], "READY")
+        self.assertEqual(
+            monitored["local_trajectory"]["trajectory_id"],
+            decision["decision_id"],
+        )
+        self.assertEqual(monitored["session"]["state"], "TRAJECTORY_READY")
 
 
 if __name__ == "__main__":

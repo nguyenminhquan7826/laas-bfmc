@@ -144,6 +144,10 @@ struct ParkingTrajectoryMsg {
     std::string goal_mode;
     std::string validation;
     std::string prototype_warning;
+    // Present for Pi-owned local trajectories. Server-owned V1 trajectories
+    // may leave these fields empty.
+    std::string map_package_sha256;
+    std::string planning_owner;
     std::vector<ParkingTrajectoryPoint> points;
 };
 

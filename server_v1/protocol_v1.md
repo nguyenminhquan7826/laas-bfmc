@@ -53,7 +53,22 @@ HOLD.
 
 `ACCEPTED` confirms only that the decision hash matches the Pi's configured
 package identity. `READY` may be reported only after the local worker has hashed
-the actual files and produced a validated trajectory.
+the actual files, produced a validated trajectory, and sent the following
+`local_trajectory` telemetry. The server rejects an early `READY`.
+
+## Pi -> Server: local_trajectory
+
+Used only with client-owned planning. This is read-only monitoring data, not an
+actuator command:
+
+```json
+{"type":"local_trajectory","version":1,"seq":154,"timestamp_ms":1787730000300,"decision_id":85,"trajectory_id":85,"source_seq":152,"map_id":"map_v1","map_package_sha256":"6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed","planning_owner":"client","target_slot":"P_B2","reference_point":"rear_axle_center","goal_mode":"forward","validation":"PASS","points":[{"x_m":1.3,"y_m":0.751,"yaw_rad":0.0,"v_ref_mps":0.1,"direction":"FORWARD"}]}
+```
+
+The server checks the active decision ID, map package, target, current parking
+state, complete path geometry, spacing, yaw continuity, and collisions. Only
+after this message is accepted may the matching `navigation_decision_status`
+transition to `READY`.
 
 ## Parking session state machine
 
@@ -228,6 +243,9 @@ Server replies with:
 14. A safety pause is controlled locally by the Pi; Server state is advisory/orchestration only.
 15. `SAFETY_CLEARED` causes replanning; it does not authorize direct resume of the previous trajectory.
 16. After `COMPLETED`, automatic parking-status updates do not start a new session; use `plan_request` with `new_session=true`.
-17. In client-owned mode, the server never sends a parking trajectory.
+17. In client-owned mode, the server never sends a parking trajectory; the Pi
+    sends its local trajectory back only as read-only monitoring telemetry.
 18. The Pi must verify `map_package_sha256` before local planning.
 19. A navigation decision is an objective, not permission to move; local freshness, feasibility, tracker, and safety gates remain authoritative.
+20. `READY` is rejected until the server has accepted the matching
+    `local_trajectory`.

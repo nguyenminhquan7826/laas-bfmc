@@ -329,6 +329,7 @@ class ServerContext:
         self.trajectory_id = 0
         self.navigation_decision_id = 0
         self.active_navigation_decision: Optional[dict[str, Any]] = None
+        self.accepted_local_trajectory_id: Optional[int] = None
         self.session = ParkingSession()
         self.monitoring = VehicleStateStore(
             offline_after_ms=vehicle_offline_after_ms
@@ -339,14 +340,29 @@ class ServerContext:
             self.trajectory_id += 1
             return self.trajectory_id
 
-    def set_navigation_decision(self, decision: dict[str, Any]) -> None:
+    def set_navigation_decision(self, decision: Optional[dict[str, Any]]) -> None:
         with self.state_lock:
-            self.active_navigation_decision = dict(decision)
+            self.active_navigation_decision = (
+                None if decision is None else dict(decision)
+            )
+            decision_id = (
+                None if decision is None else decision.get("decision_id")
+            )
+            if decision_id != self.accepted_local_trajectory_id:
+                self.accepted_local_trajectory_id = None
 
     def next_navigation_decision_id(self) -> int:
         with self.state_lock:
             self.navigation_decision_id += 1
             return self.navigation_decision_id
+
+    def mark_local_trajectory_accepted(self, decision_id: int) -> None:
+        with self.state_lock:
+            self.accepted_local_trajectory_id = decision_id
+
+    def local_trajectory_is_accepted(self, decision_id: int) -> bool:
+        with self.state_lock:
+            return decision_id == self.accepted_local_trajectory_id
 
     def navigation_snapshot(self) -> Optional[dict[str, Any]]:
         with self.state_lock:
@@ -543,6 +559,46 @@ def validate_serialized_trajectory(
     return True, "ok"
 
 
+def validate_local_trajectory(
+    ctx: ServerContext,
+    msg: dict[str, Any],
+) -> tuple[bool, str]:
+    ok, reason = validate_common(msg)
+    if not ok:
+        return ok, reason
+    ok, reason = validate_seq_and_timestamp(msg)
+    if not ok:
+        return ok, reason
+    decision_id = msg.get("decision_id")
+    trajectory_id = msg.get("trajectory_id")
+    if (
+        not isinstance(decision_id, int)
+        or isinstance(decision_id, bool)
+        or decision_id <= 0
+        or trajectory_id != decision_id
+    ):
+        return False, "local_trajectory_decision_id_mismatch"
+    if msg.get("planning_owner") != "client":
+        return False, "local_trajectory_owner_mismatch"
+    if msg.get("map_package_sha256") != ctx.map_manifest["package_sha256"]:
+        return False, "local_trajectory_map_package_mismatch"
+
+    active = ctx.navigation_snapshot()
+    if active is None or active.get("decision_id") != decision_id:
+        return False, "local_trajectory_not_active_decision"
+    if msg.get("target_slot") != active.get("target_slot"):
+        return False, "local_trajectory_target_mismatch"
+
+    snap = ctx.snapshot()
+    parking = snap.get("parking_status")
+    if not isinstance(parking, dict):
+        return False, "local_trajectory_parking_status_missing"
+    states = slot_states_from_status(parking)
+    trajectory = dict(msg)
+    trajectory["type"] = "trajectory"
+    return validate_serialized_trajectory(ctx, trajectory, states)
+
+
 def build_trajectory_response(
     ctx: ServerContext,
     selected: SlotPlan,
@@ -662,7 +718,7 @@ class Handler(socketserver.StreamRequestHandler):
             if states.get(str(slot.get("id"))) == "FREE"
         ]
         if not free_slots:
-            self.ctx.set_navigation_decision({})
+            self.ctx.set_navigation_decision(None)
             self.send_planning_result(
                 source_seq, "NO_FREE_SLOT", "no_slot_in_FREE_state"
             )
@@ -958,12 +1014,51 @@ class Handler(socketserver.StreamRequestHandler):
                         self.record_accepted(msg)
                     self.send_ack(msg, ok, reason)
 
+                elif msg_type == "local_trajectory":
+                    ok, reason = validate_local_trajectory(self.ctx, msg)
+                    if ok:
+                        self.ctx.mark_local_trajectory_accepted(
+                            int(msg["decision_id"])
+                        )
+                        self.record_accepted(msg)
+                    self.send_ack(msg, ok, reason)
+
                 elif msg_type == "navigation_decision_status":
                     ok, reason = validate_navigation_decision_status(msg)
+                    active = None
                     if ok:
                         active = self.ctx.navigation_snapshot()
                         if active is None or msg.get("decision_id") != active.get("decision_id"):
                             ok, reason = False, "navigation_decision_id_mismatch"
+                    if ok:
+                        status = str(msg["status"])
+                        decision_id = int(msg["decision_id"])
+                        if status == "PLANNING":
+                            self.ctx.session.start_planning(
+                                "client_local_hybrid_astar_running"
+                            )
+                        elif status == "READY":
+                            if not self.ctx.local_trajectory_is_accepted(
+                                decision_id
+                            ):
+                                ok, reason = (
+                                    False,
+                                    "local_trajectory_missing_before_ready",
+                                )
+                            else:
+                                self.ctx.session.mark_trajectory_ready(
+                                    decision_id,
+                                    str(active["target_slot"]),
+                                    "client_local_trajectory_ready",
+                                )
+                        elif status == "COMPLETED":
+                            ok, reason = self.ctx.session.mark_completed(decision_id)
+                        elif status == "REJECTED":
+                            self.ctx.session.set_waiting(
+                                "client_local_planning_rejected:" + str(msg["reason"]),
+                                replan_pending=True,
+                            )
+                            self.ctx.set_navigation_decision(None)
                     if ok:
                         self.record_accepted(msg)
                     self.send_ack(msg, ok, reason)

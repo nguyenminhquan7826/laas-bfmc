@@ -49,6 +49,20 @@ export interface VehicleStatus {
   trajectory?: Record<string, unknown> | null;
   safety?: Record<string, unknown> | null;
   runtime?: RuntimeMessage | null;
+  navigation?: {
+    decision_id: number;
+    map_package_sha256: string;
+    planning_owner: string;
+    maneuver: string;
+    target_slot: string;
+    local_planner: string;
+    trigger: string;
+  } | null;
+  navigation_status?: {
+    decision_id: number;
+    status: string;
+    reason: string;
+  } | null;
   session?: SessionSnapshot | null;
 }
 
@@ -59,6 +73,11 @@ export interface MapMetadata {
   frame?: Record<string, unknown>;
   width_x_m: number;
   height_y_m: number;
+  map_package?: {
+    package_version: number;
+    package_sha256: string;
+    yaw_convention: string;
+  };
   slots: Array<{
     id: string;
     row?: string;

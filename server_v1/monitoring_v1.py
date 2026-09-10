@@ -67,6 +67,8 @@ class VehicleStateStore:
             "trajectory": None,
             "safety": None,
             "runtime": None,
+            "navigation": None,
+            "navigation_status": None,
             "session": None,
         }
 
@@ -162,6 +164,8 @@ class VehicleStateStore:
                 vehicle["safety"] = received
             elif msg_type == "runtime_status":
                 vehicle["runtime"] = received
+            elif msg_type == "navigation_decision_status":
+                vehicle["navigation_status"] = received
 
             if session is not None:
                 vehicle["session"] = copy.deepcopy(session)
@@ -176,6 +180,23 @@ class VehicleStateStore:
                 connection_id, self.default_vehicle_id
             )
             self._vehicle_locked(vehicle_id)["session"] = copy.deepcopy(session)
+
+    def update_navigation(
+        self,
+        connection_id: str,
+        navigation: dict[str, Any],
+    ) -> None:
+        now_mono = time.monotonic()
+        now_utc_ms = int(time.time() * 1000.0)
+        with self._lock:
+            vehicle_id = self._connections.get(
+                connection_id, self.default_vehicle_id
+            )
+            self._vehicle_locked(vehicle_id)["navigation"] = {
+                "received_utc_ms": now_utc_ms,
+                "received_mono": now_mono,
+                "message": copy.deepcopy(navigation),
+            }
 
     @staticmethod
     def _message_snapshot(
@@ -225,6 +246,12 @@ class VehicleStateStore:
             "trajectory": self._message_snapshot(vehicle["trajectory"], now_mono),
             "safety": self._message_snapshot(vehicle["safety"], now_mono),
             "runtime": self._message_snapshot(vehicle["runtime"], now_mono),
+            "navigation": self._message_snapshot(
+                vehicle["navigation"], now_mono
+            ),
+            "navigation_status": self._message_snapshot(
+                vehicle["navigation_status"], now_mono
+            ),
             "session": copy.deepcopy(vehicle["session"]),
         }
 

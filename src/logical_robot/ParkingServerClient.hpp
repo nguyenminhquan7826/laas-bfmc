@@ -34,6 +34,11 @@ public:
                               const std::string& status,
                               const std::string& reason_text = std::string());
     bool sendSessionQuery();
+    bool sendNavigationDecisionStatus(
+        std::uint64_t sequence,
+        std::uint64_t decision_id,
+        const std::string& status,
+        const std::string& reason_text);
 
     bool popMessage(ParkingServerMessage& out);
 

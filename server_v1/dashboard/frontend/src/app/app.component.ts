@@ -102,6 +102,10 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.vehicle?.safety?.[key] ?? null;
   }
 
+  shortHash(value: string | undefined): string {
+    return value ? `${value.slice(0, 8)}…${value.slice(-6)}` : '—';
+  }
+
   private applyVehicles(response: VehiclesResponse): void {
     this.vehicles = response.vehicles;
     if (!this.selectedVehicleId && this.vehicles.length) {

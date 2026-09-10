@@ -464,6 +464,40 @@ bool ParkingProtocol::encodeSessionQuery(const std::string& map_id,
     return !line.empty();
 }
 
+bool ParkingProtocol::encodeNavigationDecisionStatus(
+    std::uint64_t sequence,
+    std::uint64_t timestamp_ms,
+    const std::string& map_id,
+    std::uint64_t decision_id,
+    const std::string& status,
+    const std::string& reason_text,
+    std::string& line,
+    std::string& reason)
+{
+    static const std::set<std::string> allowed = {
+        "ACCEPTED", "PLANNING", "READY", "REJECTED", "COMPLETED"
+    };
+    if (map_id.empty() || decision_id == 0U ||
+        allowed.count(status) == 0U || reason_text.empty()) {
+        reason = "invalid_navigation_decision_status";
+        return false;
+    }
+    json_object* object = makeBase("navigation_decision_status");
+    addUnsigned(object, "seq", sequence);
+    addUnsigned(object, "timestamp_ms", timestamp_ms);
+    json_object_object_add(
+        object, "map_id", json_object_new_string(map_id.c_str()));
+    addUnsigned(object, "decision_id", decision_id);
+    json_object_object_add(
+        object, "status", json_object_new_string(status.c_str()));
+    json_object_object_add(
+        object, "reason", json_object_new_string(reason_text.c_str()));
+    line = dumpJson(object);
+    json_object_put(object);
+    reason = line.empty() ? "json_encode_failed" : "ok";
+    return !line.empty();
+}
+
 bool ParkingProtocol::decodeServerLine(const std::string& line,
                                        const std::string& expected_map_id,
                                        ParkingServerMessage& out,
@@ -583,6 +617,36 @@ bool ParkingProtocol::decodeServerLine(const std::string& line,
             reason = "missing_session";
             return false;
         }
+        json_object_put(object);
+        reason = "ok";
+        return true;
+    }
+
+    if (type == "navigation_decision") {
+        NavigationDecisionMsg decision;
+        decision.header.valid = true;
+        decision.header.timestamp_ms = out.header.timestamp_ms;
+        decision.map_id = out.map_id;
+        if (!getUnsigned(object, "decision_id", decision.decision_id) ||
+            !getUnsigned(object, "source_seq", decision.source_seq) ||
+            !getString(object, "map_package_sha256", decision.map_package_sha256) ||
+            !getString(object, "planning_owner", decision.planning_owner) ||
+            !getString(object, "maneuver", decision.maneuver) ||
+            !getString(object, "target_slot", decision.target_slot) ||
+            !getString(object, "local_planner", decision.local_planner) ||
+            !getString(object, "trigger", decision.trigger) ||
+            decision.decision_id == 0U ||
+            decision.map_package_sha256.size() != 64U ||
+            decision.planning_owner != "client" ||
+            decision.maneuver != "PARK_AT_SLOT" ||
+            decision.target_slot.empty() ||
+            decision.local_planner != "HYBRID_A_STAR") {
+            json_object_put(object);
+            reason = "invalid_navigation_decision";
+            return false;
+        }
+        out.type = ParkingServerMessageType::NAVIGATION_DECISION;
+        out.navigation_decision = std::move(decision);
         json_object_put(object);
         reason = "ok";
         return true;

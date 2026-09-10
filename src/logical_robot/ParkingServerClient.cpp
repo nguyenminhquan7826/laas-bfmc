@@ -333,6 +333,19 @@ bool ParkingServerClient::sendSessionQuery()
                                                line, reason) && queueLine(line);
 }
 
+bool ParkingServerClient::sendNavigationDecisionStatus(
+    std::uint64_t sequence,
+    std::uint64_t decision_id,
+    const std::string& status,
+    const std::string& reason_text)
+{
+    std::string line, reason;
+    return ParkingProtocol::encodeNavigationDecisionStatus(
+               sequence, nowMs(), config_.parking.map_id, decision_id,
+               status, reason_text, line, reason) &&
+           queueLine(line);
+}
+
 bool ParkingServerClient::popMessage(ParkingServerMessage& out)
 {
     if (rx_messages_.empty()) {

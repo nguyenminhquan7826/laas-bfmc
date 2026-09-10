@@ -14,6 +14,7 @@ if str(SERVER_DIR) not in sys.path:
 from server_stub import (
     MAP_ID,
     normalize_source_seq,
+    validate_navigation_decision_status,
     validate_common,
     validate_parking_status,
     validate_plan_request,
@@ -100,6 +101,36 @@ class ServerProtocolTests(unittest.TestCase):
         self.assertEqual(
             validate_runtime_status(msg),
             (False, "invalid_bool:uart.tx_enabled"),
+        )
+
+    def test_navigation_decision_status_accepts_client_ack(self) -> None:
+        msg = {
+            "type": "navigation_decision_status",
+            "version": 1,
+            "vehicle_id": "car_01",
+            "seq": 13,
+            "timestamp_ms": 1237,
+            "map_id": MAP_ID,
+            "decision_id": 7,
+            "status": "ACCEPTED",
+            "reason": "MAP_PACKAGE_ID_MATCH_LOCAL_VERIFY_PENDING",
+        }
+        self.assertEqual(validate_navigation_decision_status(msg), (True, "ok"))
+
+    def test_navigation_decision_status_rejects_unknown_status(self) -> None:
+        msg = {
+            "type": "navigation_decision_status",
+            "version": 1,
+            "seq": 13,
+            "timestamp_ms": 1237,
+            "map_id": MAP_ID,
+            "decision_id": 7,
+            "status": "RUNNING",
+            "reason": "not_in_protocol_v1",
+        }
+        self.assertEqual(
+            validate_navigation_decision_status(msg),
+            (False, "invalid_navigation_decision_status"),
         )
 
     def test_parking_status_requires_exactly_all_four_slots(self) -> None:

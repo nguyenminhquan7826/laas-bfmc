@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "map_id": "map_v1",
+  "package_version": 1,
+  "package_sha256": "6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed",
+  "yaw_convention": "MAP_CCW_POSITIVE_SENSOR_CW_CONVERTED_AT_PI",
+  "files": [
+    {
+      "path": "map_v1.yaml",
+      "size_bytes": 5403,
+      "sha256": "2549e498b8c745b8dc6fb217bfda45b431ddff3846fcae737db64627fbfc9329"
+    },
+    {
+      "path": "vehicle_v1.yaml",
+      "size_bytes": 3703,
+      "sha256": "774fa3f6c5aec88e5f97ab7d607075632a658ec30ea158e5342e792a402363a8"
+    },
+    {
+      "path": "planner_v1.yaml",
+      "size_bytes": 2160,
+      "sha256": "787958f525ce20d0ff39db6c0b28f5b11708984ab6a81443ff78abc470d8943c"
+    },
+    {
+      "path": "drivable_grid_v1.json",
+      "size_bytes": 33795,
+      "sha256": "048a5f2f366c14ae895bb06a308118ab8992e662dd969935614e807172b3d050"
+    }
+  ]
+}

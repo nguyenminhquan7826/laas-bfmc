@@ -98,6 +98,19 @@ jobs:
       - name: Run runtime monitoring protocol test
         run: /tmp/test_parking_runtime_status_protocol
 
+      - name: Build navigation decision protocol test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Iserver_v1/tests/cpp_stubs \
+            -Isrc \
+            server_v1/tests/test_navigation_decision_protocol.cpp \
+            src/logical_robot/ParkingProtocol.cpp \
+            $(pkg-config --cflags --libs json-c) \
+            -o /tmp/test_navigation_decision_protocol
+
+      - name: Run navigation decision protocol test
+        run: /tmp/test_navigation_decision_protocol
+
   step12-policies:
     runs-on: ubuntu-latest
 

@@ -845,6 +845,39 @@ void Executive::parkingNetworkTick()
                 parking_session_sync_reason_ = "SESSION_STATUS_MISSING_SNAPSHOT";
                 std::cerr << "[PARKING][SYNC] invalid session_status -> HOLD\n";
             }
+        } else if (server_message.type ==
+                   ParkingServerMessageType::NAVIGATION_DECISION) {
+            const NavigationDecisionMsg& decision =
+                server_message.navigation_decision;
+            const bool map_package_matches =
+                decision.map_package_sha256 ==
+                config_.parking.map_package_sha256;
+
+            parking_session_sync_hold_ = true;
+            if (!map_package_matches) {
+                parking_session_sync_reason_ =
+                    "LOCAL_MAP_PACKAGE_MISMATCH";
+                parking_server_.sendNavigationDecisionStatus(
+                    parking_status_tx_sequence_++, decision.decision_id,
+                    "REJECTED", parking_session_sync_reason_);
+                std::cerr
+                    << "[PARKING][LOCAL_PLAN] reject decision="
+                    << decision.decision_id
+                    << " reason=" << parking_session_sync_reason_ << "\n";
+            } else {
+                blackboard_.setNavigationDecision(decision);
+                parking_session_sync_reason_ =
+                    "LOCAL_PLANNER_PENDING";
+                parking_server_.sendNavigationDecisionStatus(
+                    parking_status_tx_sequence_++, decision.decision_id,
+                    "ACCEPTED", "MAP_PACKAGE_ID_MATCH_LOCAL_VERIFY_PENDING");
+                std::cout
+                    << "[PARKING][LOCAL_PLAN] accepted decision="
+                    << decision.decision_id
+                    << " maneuver=" << decision.maneuver
+                    << " target=" << decision.target_slot
+                    << " planner=" << decision.local_planner << "\n";
+            }
         } else if (server_message.type == ParkingServerMessageType::PLANNING_RESULT) {
             std::cout << "[PARKING] planning_result=" << server_message.status
                       << " reason=" << server_message.reason << "\n";

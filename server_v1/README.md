@@ -1,9 +1,13 @@
 # LAAS Parking Server V1
 
-Desktop/offline parking-server prototype for `map_v1`. It does not modify the
-Raspberry Pi runtime and has no STM32/UART/actuator interface.
+Parking and navigation prototype for `map_v1`. Step 3 adds a guarded migration
+to client-owned Hybrid A*: the Raspberry Pi owns the operational map and local
+parking plan, while the server issues high-level decisions and monitors status.
+Neither server mode has an STM32/UART/actuator interface.
 
-## Current pipeline
+## Planning ownership modes
+
+The stable default remains server-owned planning:
 
 ```text
 vehicle_pose + parking_status
@@ -20,6 +24,20 @@ vehicle_pose + parking_status
             ↓
      TCP/NDJSON trajectory
 ```
+
+The new Step 3 staging mode is client-owned planning:
+
+```text
+server: parking status -> target/maneuver decision
+                         ↓ navigation_decision + map hash
+Pi:     verify local map -> local Hybrid A* -> local tracker/safety
+                         ↓ read-only status/trajectory telemetry
+server: monitoring dashboard + later intersection/roundabout decisions
+```
+
+The decision is sent early and may be cached by the Pi. Loss of the server must
+not disable localization, the current local trajectory, or the immediate local
+STOP/HOLD layer.
 
 ## Implemented
 
@@ -40,6 +58,52 @@ vehicle_pose + parking_status
 - `SAFETY_CLEARED` triggers a fresh replan; the old trajectory is never blindly resumed.
 - BFMC-inspired Angular 18 monitoring dashboard, served by the read-only HTTP
   backend.
+- Deterministic operational-map manifest and SHA-256 package identity.
+- Feature-flagged `navigation_decision` contract for Pi-owned Hybrid A*.
+- Standalone Pi local-planner worker with map verification and trajectory
+  validation.
+
+## Step 3: client-owned local planning
+
+Keep the current working behavior with the default:
+
+```powershell
+py server_stub.py --port 5000 --monitor-port 5005 --planning-owner server
+```
+
+Exercise the new server decision boundary without enabling actuator output:
+
+```powershell
+py server_stub.py --port 5000 --monitor-port 5005 --planning-owner client
+```
+
+In client mode, the server sends `PARK_AT_SLOT` plus the selected slot and exact
+`map_package_sha256`; it does not send a trajectory. The Pi accepts the decision
+only when the hash matches its checked-in operational map. The local trajectory
+uses `trajectory_id == decision_id`, which makes monitoring and acknowledgements
+traceable across worker restarts.
+
+Current Step 3A integration boundary:
+
+- Server decision, map package, C++ decoding/expected-identity check,
+  monitoring, and the standalone local Hybrid A* worker are implemented and
+  tested. The worker performs the actual on-disk checksum verification.
+- The C++ runtime deliberately enters `HOLD/LOCAL_PLANNER_PENDING` after accepting
+  a decision. Starting the Python worker asynchronously, loading its trajectory
+  into the C++ tracker, and reporting `READY/REJECTED` is Step 3B.
+- Therefore use `--planning-owner server` for the present end-to-end vehicle run.
+  Client mode is safe contract/integration testing only until Step 3B lands.
+
+Run the Step 3 software tests from `server_v1`:
+
+```powershell
+py -m unittest tests.test_client_owned_planning tests.test_server_protocol
+```
+
+`map_manifest_v1.json` covers `map_v1.yaml`, `vehicle_v1.yaml`,
+`planner_v1.yaml`, and `drivable_grid_v1.json`. Any operational-file change must
+regenerate the manifest and update the expected hash in the Pi configuration;
+otherwise planning fails closed.
 
 ## Step 13 monitoring dashboard and API
 
@@ -164,5 +228,7 @@ A `validation=PASS` trajectory means only that the current **offline V1** checks
 passed. It is not authorization to drive the real vehicle. Full-body collision
 and physical geometry must be verified before actuator integration.
 
-The Pi remains authoritative for immediate STOP/HOLD. The Server state machine
-coordinates planning/replanning but is not the realtime emergency-stop layer.
+The Pi remains authoritative for immediate STOP/HOLD. In server-owned mode the
+Server coordinates planning/replanning. In client-owned mode it supplies only
+high-level navigation decisions and monitoring; it is never the realtime
+emergency-stop layer.

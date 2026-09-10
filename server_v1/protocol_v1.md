@@ -7,6 +7,54 @@ V1 is currently an OFFLINE/INTEGRATION protocol. A returned trajectory must not
 be sent to actuators until full vehicle footprint and final vehicle geometry are
 physically verified.
 
+Planning ownership is selected when the server starts:
+
+- `server` (default): the existing server-owned Hybrid A* returns `trajectory`.
+- `client`: the server returns `navigation_decision`; the Pi verifies its local
+  map package and runs Hybrid A* locally.
+
+The modes are mutually exclusive for one server instance.
+
+## Operational map package
+
+`map_manifest_v1.json` identifies the exact map, vehicle geometry, planner
+configuration, and drivable grid used for local planning. `package_sha256` is a
+deterministic digest over each file name, size, and SHA-256 digest. A client must
+fail closed if a decision's `map_package_sha256` differs from its verified local
+package. Matching only `map_id` is insufficient.
+
+## Server -> Pi: navigation_decision
+
+Used only with `--planning-owner client`:
+
+```json
+{"type":"navigation_decision","version":1,"decision_id":85,"source_seq":152,"timestamp_ms":1787730000150,"map_id":"map_v1","map_package_sha256":"6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed","planning_owner":"client","maneuver":"PARK_AT_SLOT","target_slot":"P_B2","local_planner":"HYBRID_A_STAR","trigger":"parking_status"}
+```
+
+The server chooses the navigation objective. The Pi owns path feasibility,
+trajectory generation, tracking, and immediate safety. Decisions may be sent in
+advance and cached, but the Pi must revalidate current localization, slot state,
+and local safety before activating a locally generated trajectory.
+
+Step 3 currently supports `PARK_AT_SLOT`. Later intersection and roundabout
+decisions extend `maneuver` without moving local trajectory generation back to
+the server.
+
+## Pi -> Server: navigation_decision_status
+
+```json
+{"type":"navigation_decision_status","version":1,"vehicle_id":"car_01","seq":153,"timestamp_ms":1787730000180,"map_id":"map_v1","decision_id":85,"status":"ACCEPTED","reason":"MAP_PACKAGE_ID_MATCH_LOCAL_VERIFY_PENDING"}
+```
+
+Supported states are `ACCEPTED`, `PLANNING`, `READY`, `REJECTED`, and
+`COMPLETED`. `decision_id` must match the currently active server decision. A
+map-package mismatch must be reported as `REJECTED` and must keep the vehicle in
+HOLD.
+
+`ACCEPTED` confirms only that the decision hash matches the Pi's configured
+package identity. `READY` may be reported only after the local worker has hashed
+the actual files and produced a validated trajectory.
+
 ## Parking session state machine
 
 Server V1 maintains one parking session with these states:
@@ -180,3 +228,6 @@ Server replies with:
 14. A safety pause is controlled locally by the Pi; Server state is advisory/orchestration only.
 15. `SAFETY_CLEARED` causes replanning; it does not authorize direct resume of the previous trajectory.
 16. After `COMPLETED`, automatic parking-status updates do not start a new session; use `plan_request` with `new_session=true`.
+17. In client-owned mode, the server never sends a parking trajectory.
+18. The Pi must verify `map_package_sha256` before local planning.
+19. A navigation decision is an objective, not permission to move; local freshness, feasibility, tracker, and safety gates remain authoritative.

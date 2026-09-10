@@ -13,6 +13,7 @@ enum class ParkingServerMessageType {
     TRAJECTORY,
     PLANNING_RESULT,
     SESSION_STATUS,
+    NAVIGATION_DECISION,
     ERROR
 };
 
@@ -45,6 +46,7 @@ struct ParkingServerMessage {
     bool has_session = false;
 
     ParkingTrajectoryMsg trajectory;
+    NavigationDecisionMsg navigation_decision;
 };
 
 class ParkingProtocol {
@@ -82,6 +84,15 @@ public:
     static bool encodeSessionQuery(const std::string& map_id,
                                    std::string& line,
                                    std::string& reason);
+    static bool encodeNavigationDecisionStatus(
+        std::uint64_t sequence,
+        std::uint64_t timestamp_ms,
+        const std::string& map_id,
+        std::uint64_t decision_id,
+        const std::string& status,
+        const std::string& reason_text,
+        std::string& line,
+        std::string& reason);
 
     static bool decodeServerLine(const std::string& line,
                                  const std::string& expected_map_id,

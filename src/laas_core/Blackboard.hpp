@@ -57,6 +57,11 @@ public:
         parking_trajectory_ = msg;
     }
 
+    void setNavigationDecision(const NavigationDecisionMsg& msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        navigation_decision_ = msg;
+    }
+
     FrameMsg frame() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return frame_;
@@ -107,6 +112,11 @@ public:
         return parking_trajectory_;
     }
 
+    NavigationDecisionMsg navigationDecision() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return navigation_decision_;
+    }
+
 private:
     mutable std::mutex mutex_;
 
@@ -121,6 +131,7 @@ private:
     VehiclePoseMsg vehicle_pose_;
     ParkingStatusMsg parking_status_;
     ParkingTrajectoryMsg parking_trajectory_;
+    NavigationDecisionMsg navigation_decision_;
 };
 
 }  // namespace laas

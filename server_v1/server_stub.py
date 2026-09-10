@@ -24,6 +24,7 @@ from hybrid_astar_v1 import HybridAStarPlanner, Node, Pose, build_slot_obstacles
 from slot_selector_v1 import SlotPlan, choose_best_free_slot
 from parking_session_v1 import ParkingSession
 from monitoring_v1 import MonitoringHTTPServer, VehicleStateStore
+from map_package_v1 import load_and_verify_manifest
 
 PROTOCOL_VERSION = 1
 MAP_ID = "map_v1"
@@ -33,6 +34,7 @@ ALLOWED_DIRECTIONS = {"FORWARD", "REVERSE"}
 TRAJECTORY_STATUSES = {"RECEIVED", "EXECUTING", "PAUSED", "COMPLETED", "REJECTED", "REPLAN_REQUESTED"}
 SAFETY_EVENTS = {"PEDESTRIAN_BLOCKING", "CRITICAL_OBSTACLE", "TRAJECTORY_INVALID", "SERVER_TIMEOUT", "SAFETY_CLEARED"}
 OPERATING_MODES = {"LANE", "PARKING"}
+NAVIGATION_DECISION_STATUSES = {"ACCEPTED", "PLANNING", "READY", "REJECTED", "COMPLETED"}
 
 DEFAULT_POSE_MAX_AGE_MS = 2000
 DEFAULT_PARKING_MAX_AGE_MS = 3000
@@ -214,6 +216,24 @@ def validate_runtime_status(msg: dict[str, Any]) -> tuple[bool, str]:
     return True, "ok"
 
 
+def validate_navigation_decision_status(msg: dict[str, Any]) -> tuple[bool, str]:
+    ok, reason = validate_common(msg)
+    if not ok:
+        return ok, reason
+    ok, reason = validate_seq_and_timestamp(msg)
+    if not ok:
+        return ok, reason
+    decision_id = msg.get("decision_id")
+    if not isinstance(decision_id, int) or isinstance(decision_id, bool) or decision_id <= 0:
+        return False, "invalid_decision_id"
+    if msg.get("status") not in NAVIGATION_DECISION_STATUSES:
+        return False, "invalid_navigation_decision_status"
+    detail = msg.get("reason")
+    if not isinstance(detail, str) or not detail or len(detail) > 160:
+        return False, "invalid_navigation_decision_reason"
+    return True, "ok"
+
+
 def slot_states_from_status(msg: dict[str, Any]) -> Dict[str, str]:
     return {str(s["id"]): str(s["state"]).upper() for s in msg["slots"]}
 
@@ -240,6 +260,11 @@ def monitoring_map_metadata(ctx: "ServerContext") -> dict[str, Any]:
         "width_x_m": float(map_section.get("width_x_m", 0.0)),
         "height_y_m": float(map_section.get("height_y_m", 0.0)),
         "slots": slots,
+        "map_package": {
+            "package_version": ctx.map_manifest["package_version"],
+            "package_sha256": ctx.map_manifest["package_sha256"],
+            "yaw_convention": ctx.map_manifest["yaw_convention"],
+        },
     }
 
 
@@ -273,9 +298,13 @@ class ServerContext:
         pose_max_age_ms: int = DEFAULT_POSE_MAX_AGE_MS,
         parking_max_age_ms: int = DEFAULT_PARKING_MAX_AGE_MS,
         vehicle_offline_after_ms: int = 3000,
+        planning_owner: str = "server",
     ):
         self.root = root
         self.planning_enabled = planning_enabled
+        if planning_owner not in {"server", "client"}:
+            raise ValueError("planning_owner must be server or client")
+        self.planning_owner = planning_owner
         self.pose_max_age_ms = int(pose_max_age_ms)
         self.parking_max_age_ms = int(parking_max_age_ms)
 
@@ -283,6 +312,7 @@ class ServerContext:
         self.vehicle_cfg = load_yaml(root / "vehicle_v1.yaml")
         self.planner_cfg = load_yaml(root / "planner_v1.yaml")
         self.planner = HybridAStarPlanner(self.map_cfg, self.vehicle_cfg, self.planner_cfg)
+        self.map_manifest = load_and_verify_manifest(root)
         self.nominal_speed = float(self.vehicle_cfg.get("motion", {}).get("parking_nominal_speed_mps", 0.10))
 
         self.state_lock = threading.Lock()
@@ -297,6 +327,8 @@ class ServerContext:
         self.parking_generation = 0
 
         self.trajectory_id = 0
+        self.navigation_decision_id = 0
+        self.active_navigation_decision: Optional[dict[str, Any]] = None
         self.session = ParkingSession()
         self.monitoring = VehicleStateStore(
             offline_after_ms=vehicle_offline_after_ms
@@ -306,6 +338,23 @@ class ServerContext:
         with self.state_lock:
             self.trajectory_id += 1
             return self.trajectory_id
+
+    def set_navigation_decision(self, decision: dict[str, Any]) -> None:
+        with self.state_lock:
+            self.active_navigation_decision = dict(decision)
+
+    def next_navigation_decision_id(self) -> int:
+        with self.state_lock:
+            self.navigation_decision_id += 1
+            return self.navigation_decision_id
+
+    def navigation_snapshot(self) -> Optional[dict[str, Any]]:
+        with self.state_lock:
+            return (
+                None
+                if self.active_navigation_decision is None
+                else dict(self.active_navigation_decision)
+            )
 
     def set_pose(self, pose: Pose, seq: Any) -> None:
         with self.state_lock:
@@ -577,6 +626,80 @@ class Handler(socketserver.StreamRequestHandler):
         payload.update(extra)
         self.send_json(payload)
 
+    def dispatch_planning(self, source_seq: Any, trigger: str, force: bool = False) -> None:
+        if self.ctx.planning_owner == "client":
+            self.issue_navigation_decision(source_seq, trigger, force=force)
+        else:
+            self.plan_with_latest_state(source_seq, trigger=trigger)
+
+    def issue_navigation_decision(
+        self,
+        source_seq: Any,
+        trigger: str,
+        *,
+        force: bool = False,
+    ) -> None:
+        if not self.ctx.planning_enabled:
+            return
+        snap = self.ctx.snapshot()
+        source_seq = normalize_source_seq(source_seq, snap)
+        fresh, reason = freshness_reason(self.ctx, snap)
+        if not fresh:
+            self.send_planning_result(source_seq, "WAITING_FOR_INPUT", reason)
+            return
+        parking_msg: dict[str, Any] = snap["parking_status"]
+        states = slot_states_from_status(parking_msg)
+        current = self.ctx.navigation_snapshot()
+        if (
+            not force
+            and current is not None
+            and states.get(str(current.get("target_slot"))) == "FREE"
+        ):
+            return
+
+        free_slots = [
+            slot for slot in self.ctx.map_cfg.get("slots", [])
+            if states.get(str(slot.get("id"))) == "FREE"
+        ]
+        if not free_slots:
+            self.ctx.set_navigation_decision({})
+            self.send_planning_result(
+                source_seq, "NO_FREE_SLOT", "no_slot_in_FREE_state"
+            )
+            return
+
+        pose: Pose = snap["pose"]
+        free_slots.sort(
+            key=lambda slot: math.hypot(
+                float(slot["center_m"][0]) - pose.x,
+                float(slot["center_m"][1]) - pose.y,
+            )
+        )
+        target_slot = str(free_slots[0]["id"])
+        decision = {
+            "type": "navigation_decision",
+            "version": PROTOCOL_VERSION,
+            "decision_id": self.ctx.next_navigation_decision_id(),
+            "source_seq": source_seq,
+            "timestamp_ms": int(time.time() * 1000.0),
+            "map_id": MAP_ID,
+            "map_package_sha256": self.ctx.map_manifest["package_sha256"],
+            "planning_owner": "client",
+            "maneuver": "PARK_AT_SLOT",
+            "target_slot": target_slot,
+            "local_planner": "HYBRID_A_STAR",
+            "trigger": trigger,
+        }
+        self.ctx.set_navigation_decision(decision)
+        self.ctx.monitoring.update_navigation(
+            self.monitor_connection_id, decision
+        )
+        self.send_json(decision)
+        print(
+            f"[NAV_DECISION] id={decision['decision_id']} "
+            f"maneuver=PARK_AT_SLOT target={target_slot} owner=client"
+        )
+
     def plan_with_latest_state(self, source_seq: Any, trigger: str = "auto") -> None:
         if not self.ctx.planning_enabled:
             return
@@ -720,7 +843,7 @@ class Handler(socketserver.StreamRequestHandler):
                     if ok:
                         sess = self.ctx.session.snapshot()
                         if sess["state"] == "WAITING_INPUT" and sess["replan_pending"] and self.ctx.snapshot()["parking_status"] is not None:
-                            self.plan_with_latest_state(msg.get("seq"), trigger="fresh_pose_for_pending_replan")
+                            self.dispatch_planning(msg.get("seq"), trigger="fresh_pose_for_pending_replan")
 
                 elif msg_type == "parking_status":
                     ok, reason = validate_parking_status(msg)
@@ -749,7 +872,10 @@ class Handler(socketserver.StreamRequestHandler):
                                 trigger = "parking_status_for_pending_plan" if sess["replan_pending"] else "parking_status_initial"
                     self.send_ack(msg, ok, reason)
                     if ok and should_plan:
-                        self.plan_with_latest_state(msg.get("seq"), trigger=trigger)
+                        self.dispatch_planning(
+                            msg.get("seq"), trigger=trigger,
+                            force=trigger == "target_slot_invalidated",
+                        )
 
                 elif msg_type == "plan_request":
                     ok, reason = validate_plan_request(msg)
@@ -763,7 +889,9 @@ class Handler(socketserver.StreamRequestHandler):
                             self.ctx.session.request_replan("explicit_plan_request")
                     self.send_ack(msg, ok, reason)
                     if ok:
-                        self.plan_with_latest_state(msg.get("seq"), trigger="explicit_plan_request")
+                        self.dispatch_planning(
+                            msg.get("seq"), trigger="explicit_plan_request", force=True
+                        )
 
                 elif msg_type == "trajectory_status":
                     ok, reason = validate_trajectory_status(msg)
@@ -790,7 +918,9 @@ class Handler(socketserver.StreamRequestHandler):
                             print(f"[TRAJECTORY_STATUS] tid={tid} status={status} session={self.ctx.session.snapshot()['state']}")
                     self.send_ack(msg, ok, reason)
                     if ok and trigger_replan:
-                        self.plan_with_latest_state(msg.get("seq"), trigger="trajectory_status_replan")
+                        self.dispatch_planning(
+                            msg.get("seq"), trigger="trajectory_status_replan", force=True
+                        )
 
                 elif msg_type == "safety_event":
                     ok, reason = validate_safety_event(msg)
@@ -818,10 +948,22 @@ class Handler(socketserver.StreamRequestHandler):
                             print(f"[SAFETY_EVENT] event={event} tid={tid} session={self.ctx.session.snapshot()['state']}")
                     self.send_ack(msg, ok, reason)
                     if ok and trigger_replan:
-                        self.plan_with_latest_state(msg.get("seq"), trigger="safety_clear_or_invalid")
+                        self.dispatch_planning(
+                            msg.get("seq"), trigger="safety_clear_or_invalid", force=True
+                        )
 
                 elif msg_type == "runtime_status":
                     ok, reason = validate_runtime_status(msg)
+                    if ok:
+                        self.record_accepted(msg)
+                    self.send_ack(msg, ok, reason)
+
+                elif msg_type == "navigation_decision_status":
+                    ok, reason = validate_navigation_decision_status(msg)
+                    if ok:
+                        active = self.ctx.navigation_snapshot()
+                        if active is None or msg.get("decision_id") != active.get("decision_id"):
+                            ok, reason = False, "navigation_decision_id_mismatch"
                     if ok:
                         self.record_accepted(msg)
                     self.send_ack(msg, ok, reason)
@@ -871,6 +1013,12 @@ def main() -> None:
     parser.add_argument("--monitor-port", type=int, default=5005)
     parser.add_argument("--vehicle-offline-after-ms", type=int, default=3000)
     parser.add_argument("--no-monitoring", action="store_true", help="disable the read-only HTTP monitoring API")
+    parser.add_argument(
+        "--planning-owner",
+        choices=("server", "client"),
+        default="server",
+        help="server sends trajectories, or client receives high-level decisions",
+    )
     args = parser.parse_args()
 
     if (args.pose_max_age_ms <= 0 or args.parking_max_age_ms <= 0 or
@@ -886,6 +1034,7 @@ def main() -> None:
         pose_max_age_ms=args.pose_max_age_ms,
         parking_max_age_ms=args.parking_max_age_ms,
         vehicle_offline_after_ms=args.vehicle_offline_after_ms,
+        planning_owner=args.planning_owner,
     )
 
     monitor_server = None
@@ -912,7 +1061,11 @@ def main() -> None:
         )
 
     with ReusableTCPServer((args.host, args.port), Handler, ctx) as server:
-        mode = "transport-only" if args.transport_only else "hybrid-a*-offline"
+        mode = (
+            "transport-only" if args.transport_only
+            else "hybrid-a*-server" if args.planning_owner == "server"
+            else "navigation-decision-client-planning"
+        )
         print(f"[SERVER] listening {args.host}:{args.port} protocol=v1 map={MAP_ID} mode={mode}")
         print(
             f"[GUARD] poseMaxAge={ctx.pose_max_age_ms}ms parkingMaxAge={ctx.parking_max_age_ms}ms "

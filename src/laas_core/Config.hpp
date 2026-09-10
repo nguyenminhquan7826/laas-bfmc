@@ -89,6 +89,8 @@ struct ParkingConfig {
     bool bench_mode = true;
 
     std::string map_id = "map_v1";
+    std::string map_package_sha256 =
+        "6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed";
     std::string server_host = "127.0.0.1";
     int server_port = 5000;
     int reconnect_period_ms = 1000;

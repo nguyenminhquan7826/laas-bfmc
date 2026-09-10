@@ -147,6 +147,22 @@ struct ParkingTrajectoryMsg {
     std::vector<ParkingTrajectoryPoint> points;
 };
 
+// High-level Server decision. In client-owned planning mode this replaces a
+// Server-generated trajectory; the Pi validates the map package and creates
+// the local trajectory itself.
+struct NavigationDecisionMsg {
+    Header header;
+    std::uint64_t decision_id = 0;
+    std::uint64_t source_seq = 0;
+    std::string map_id;
+    std::string map_package_sha256;
+    std::string planning_owner;
+    std::string maneuver;
+    std::string target_slot;
+    std::string local_planner;
+    std::string trigger;
+};
+
 // Read-only parking/runtime telemetry sent to the Server monitoring backend.
 // This message never carries actuator commands or motion authorization.
 struct ParkingRuntimeStatusMsg {

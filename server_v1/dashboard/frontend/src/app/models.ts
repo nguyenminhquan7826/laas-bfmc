@@ -32,7 +32,7 @@ export interface SessionSnapshot {
   session_id?: number;
   state?: string;
   active_trajectory_id?: number | null;
-  target_slot_id?: string | null;
+  target_slot?: string | null;
   replan_count?: number;
   pause_reason?: string | null;
 }

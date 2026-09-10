@@ -62,7 +62,7 @@
         <article class="panel">
           <div class="panel-head"><div><p class="eyebrow">Server state machine</p><h2>Parking session</h2></div><span class="tag accent">{{ v.session?.state ?? 'IDLE' }}</span></div>
           <div class="line"><span>Session</span><b>#{{ v.session?.session_id ?? '—' }}</b></div>
-          <div class="line"><span>Target slot</span><b>{{ v.session?.target_slot_id ?? '—' }}</b></div>
+          <div class="line"><span>Target slot</span><b>{{ v.session?.target_slot ?? '—' }}</b></div>
           <div class="line"><span>Trajectory</span><b>{{ v.session?.active_trajectory_id ?? trajectoryValue('trajectory_id') ?? '—' }}</b></div>
           <div class="line"><span>Replans</span><b>{{ v.session?.replan_count ?? 0 }}</b></div>
           <div class="line"><span>Pause</span><b>{{ v.session?.pause_reason ?? 'none' }}</b></div>

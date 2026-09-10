@@ -17,12 +17,15 @@ MAP_PACKAGE_FILES = (
 )
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _canonical_bytes(path: Path) -> bytes:
+    """Return Git text content in a platform-independent representation.
+
+    Git may check these YAML/JSON files out as CRLF on Windows and LF on the
+    Raspberry Pi. Newline style is not map data, so the package identity is
+    calculated from canonical LF bytes on every platform.
+    """
+
+    return path.read_bytes().replace(b"\r\n", b"\n")
 
 
 def build_manifest(root: Path) -> dict[str, Any]:
@@ -32,8 +35,9 @@ def build_manifest(root: Path) -> dict[str, Any]:
         path = root / name
         if not path.is_file():
             raise FileNotFoundError(f"map_package_file_missing:{name}")
-        size = path.stat().st_size
-        digest = _sha256(path)
+        content = _canonical_bytes(path)
+        size = len(content)
+        digest = hashlib.sha256(content).hexdigest()
         files.append({"path": name, "size_bytes": size, "sha256": digest})
         package_digest.update(f"{name}\0{size}\0{digest}\n".encode("utf-8"))
     return {
@@ -60,4 +64,3 @@ def load_and_verify_manifest(root: Path) -> dict[str, Any]:
             f"actual={actual['package_sha256']}"
         )
     return actual
-

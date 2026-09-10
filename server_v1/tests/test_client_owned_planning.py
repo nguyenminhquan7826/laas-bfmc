@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import socket
 import sys
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -15,7 +16,7 @@ if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
 from local_parking_planner_v1 import plan_local_request
-from map_package_v1 import load_and_verify_manifest
+from map_package_v1 import MAP_PACKAGE_FILES, load_and_verify_manifest
 from server_stub import Handler, ReusableTCPServer, ServerContext
 
 
@@ -34,6 +35,22 @@ class MapPackageAndLocalPlannerTests(unittest.TestCase):
         self.assertEqual(manifest["map_id"], "map_v1")
         self.assertEqual(len(manifest["package_sha256"]), 64)
         self.assertEqual(len(manifest["files"]), 4)
+
+    def test_map_manifest_is_identical_for_windows_crlf_checkout(self) -> None:
+        expected = load_and_verify_manifest(SERVER_DIR)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for name in MAP_PACKAGE_FILES:
+                content = (SERVER_DIR / name).read_bytes()
+                content = content.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+                (root / name).write_bytes(content)
+            (root / "map_manifest_v1.json").write_bytes(
+                (SERVER_DIR / "map_manifest_v1.json").read_bytes()
+            )
+
+            actual = load_and_verify_manifest(root)
+
+        self.assertEqual(actual, expected)
 
     def test_local_hybrid_astar_rejects_map_hash_mismatch(self) -> None:
         request = {

@@ -103,7 +103,9 @@ py -m unittest tests.test_client_owned_planning tests.test_server_protocol
 `map_manifest_v1.json` covers `map_v1.yaml`, `vehicle_v1.yaml`,
 `planner_v1.yaml`, and `drivable_grid_v1.json`. Any operational-file change must
 regenerate the manifest and update the expected hash in the Pi configuration;
-otherwise planning fails closed.
+otherwise planning fails closed. YAML/JSON line endings are canonicalized to LF
+before hashing, so Windows CRLF and Raspberry Pi/Linux LF checkouts have the
+same package identity.
 
 ## Step 13 monitoring dashboard and API
 

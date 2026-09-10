@@ -150,8 +150,12 @@ bool ParkingTrajectoryTracker::process(const VehiclePoseMsg& pose,
     command.header.timestamp_ms = nowMs();
     if (debug) *debug = ParkingTrackerDebug{};
 
+    // Tracking is a pure map-frame computation and must not depend on whether
+    // UART RX is enabled. The pose bench needs UART RX for encoder/IMU input;
+    // actuator authorization remains owned by ParkingSafetyFilter, Executive,
+    // and UartVehicleInterface through the independent enable_uart_tx gate.
     if (!config_.parking.enable || !config_.parking.bench_mode ||
-        !config_.parking.enable_bench_tracker || config_.runtime.enable_uart) {
+        !config_.parking.enable_bench_tracker) {
         return false;
     }
     if (!pose.header.valid ||

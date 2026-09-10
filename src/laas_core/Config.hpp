@@ -93,6 +93,8 @@ struct ParkingConfig {
     int server_port = 5000;
     int reconnect_period_ms = 1000;
     int max_ndjson_line_bytes = 65536;
+    std::string vehicle_id = "car_01";
+    int monitoring_status_period_ms = 200;
 
     // Pi-side trajectory contract checks. These are integration defaults, not
     // final real-vehicle safety thresholds.

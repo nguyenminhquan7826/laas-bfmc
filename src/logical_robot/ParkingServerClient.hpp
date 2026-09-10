@@ -24,6 +24,7 @@ public:
 
     bool sendVehiclePose(const VehiclePoseMsg& msg);
     bool sendParkingStatus(const ParkingStatusMsg& msg);
+    bool sendRuntimeStatus(const ParkingRuntimeStatusMsg& msg);
     bool sendPlanRequest(std::uint64_t sequence, bool new_session);
     bool sendSafetyEvent(std::uint64_t trajectory_id,
                          bool has_trajectory_id,

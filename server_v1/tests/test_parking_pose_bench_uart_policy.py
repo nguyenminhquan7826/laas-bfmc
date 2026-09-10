@@ -20,6 +20,14 @@ class ParkingPoseBenchUartPolicyTest(unittest.TestCase):
             / "ParkingSafetyFilter.cpp"
         ).read_text(encoding="utf-8")
 
+        cls.tracker_cpp = (
+            cls.repo
+            / "src"
+            / "functional"
+            / "control"
+            / "ParkingTrajectoryTracker.cpp"
+        ).read_text(encoding="utf-8")
+
     def test_pose_bench_enables_uart_rx(self):
         self.assertIn(
             'std::getenv("LAAS_PARKING_POSE_BENCH")',
@@ -63,6 +71,12 @@ class ParkingPoseBenchUartPolicyTest(unittest.TestCase):
             'if (config_.runtime.enable_uart) '
             'return stop("UART_MUST_BE_DISABLED_IN_BENCH");',
             self.safety_cpp,
+        )
+
+    def test_tracker_does_not_treat_uart_rx_as_actuator_authority(self):
+        self.assertNotIn(
+            "config_.runtime.enable_uart",
+            self.tracker_cpp,
         )
 
 

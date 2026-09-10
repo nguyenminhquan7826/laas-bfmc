@@ -763,6 +763,7 @@ void Executive::parkingNetworkTick()
         // fresh TCP session even if their sequence did not change.
         have_sent_pose_sequence_ = false;
         have_sent_parking_status_sequence_ = false;
+        last_monitoring_status_tx_ms_ = 0U;
 
         std::cout << "[PARKING][SYNC] connected -> HOLD awaiting session\n";
     }
@@ -881,6 +882,52 @@ void Executive::parkingNetworkTick()
         if (parking_server_.sendParkingStatus(parking_status)) {
             last_sent_parking_status_sequence_ = parking_status.sequence;
             have_sent_parking_status_sequence_ = true;
+        }
+    }
+
+    const std::uint64_t monitor_now = nowMs();
+    const std::uint64_t monitor_period = static_cast<std::uint64_t>(
+        std::max(1, config_.parking.monitoring_status_period_ms));
+    if (last_monitoring_status_tx_ms_ == 0U ||
+        monitor_now - last_monitoring_status_tx_ms_ >= monitor_period) {
+        ParkingRuntimeStatusMsg status;
+        status.header.valid = true;
+        status.header.timestamp_ms = monitor_now;
+        status.sequence = monitoring_status_tx_sequence_;
+        status.vehicle_id = config_.parking.vehicle_id;
+        status.map_id = config_.parking.map_id;
+        status.operating_mode = operating_mode_.load();
+
+        status.tracker_valid = parking_tracker_debug_.valid;
+        status.tracker_goal_reached = parking_tracker_debug_.goal_reached;
+        status.trajectory_id = parking_tracker_debug_.trajectory_id;
+        status.nearest_index = static_cast<std::uint64_t>(
+            parking_tracker_debug_.nearest_index);
+        status.target_index = static_cast<std::uint64_t>(
+            parking_tracker_debug_.target_index);
+        status.cross_track_error_m = parking_tracker_debug_.nearest_distance_m;
+
+        status.safety_evaluated = parking_safety_result_.evaluated;
+        status.safety_motion_allowed = parking_safety_result_.motion_allowed;
+        status.safety_reason = parking_safety_result_.reason.empty()
+            ? "NOT_EVALUATED" : parking_safety_result_.reason;
+
+        status.uart_rx_enabled = config_.runtime.enable_uart;
+        status.uart_tx_enabled = config_.runtime.enable_uart_tx;
+        status.telemetry_valid = latest_telemetry_.header.valid;
+        status.telemetry_age_ms =
+            latest_telemetry_.header.valid &&
+            monitor_now >= latest_telemetry_.header.timestamp_ms
+                ? monitor_now - latest_telemetry_.header.timestamp_ms
+                : 0U;
+
+        status.session_sync_hold = parking_session_sync_hold_;
+        status.session_sync_reason = parking_session_sync_reason_.empty()
+            ? "UNKNOWN" : parking_session_sync_reason_;
+
+        if (parking_server_.sendRuntimeStatus(status)) {
+            ++monitoring_status_tx_sequence_;
+            last_monitoring_status_tx_ms_ = monitor_now;
         }
     }
 #endif

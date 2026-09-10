@@ -180,6 +180,8 @@ private:
     std::uint64_t last_sent_parking_status_sequence_{0};
     bool have_sent_parking_status_sequence_{false};
     std::uint64_t parking_status_tx_sequence_{1};
+    std::uint64_t monitoring_status_tx_sequence_{1};
+    std::uint64_t last_monitoring_status_tx_ms_{0};
 
     // Step-11/12: transition-based parking safety synchronization.
     // Events generated during a TCP outage remain queued, but reconnect

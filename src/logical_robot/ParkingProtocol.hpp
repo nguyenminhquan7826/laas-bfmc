@@ -57,6 +57,9 @@ public:
     static bool encodeParkingStatus(const ParkingStatusMsg& msg,
                                     std::string& line,
                                     std::string& reason);
+    static bool encodeRuntimeStatus(const ParkingRuntimeStatusMsg& msg,
+                                    std::string& line,
+                                    std::string& reason);
     static bool encodePlanRequest(std::uint64_t sequence,
                                   std::uint64_t timestamp_ms,
                                   const std::string& map_id,

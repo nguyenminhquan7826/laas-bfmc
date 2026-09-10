@@ -17,6 +17,7 @@ from server_stub import (
     validate_common,
     validate_parking_status,
     validate_plan_request,
+    validate_runtime_status,
     validate_safety_event,
     validate_serialized_trajectory,
     validate_trajectory_status,
@@ -25,6 +26,41 @@ from server_stub import (
 
 
 class ServerProtocolTests(unittest.TestCase):
+    @staticmethod
+    def runtime_status() -> dict:
+        return {
+            "type": "runtime_status",
+            "version": 1,
+            "vehicle_id": "car_01",
+            "seq": 12,
+            "timestamp_ms": 1236,
+            "map_id": MAP_ID,
+            "operating_mode": "PARKING",
+            "tracker": {
+                "valid": True,
+                "goal_reached": False,
+                "trajectory_id": 42,
+                "nearest_index": 5,
+                "target_index": 9,
+                "cross_track_error_m": 0.021,
+            },
+            "safety": {
+                "evaluated": True,
+                "motion_allowed": False,
+                "reason": "PASS_BENCH_ONLY",
+            },
+            "uart": {
+                "rx_enabled": True,
+                "tx_enabled": False,
+                "telemetry_valid": True,
+                "telemetry_age_ms": 18,
+            },
+            "session_sync": {
+                "hold": False,
+                "reason": "SYNC_READY",
+            },
+        }
+
     def test_vehicle_pose_accepts_valid_message(self) -> None:
         msg = {
             "type": "vehicle_pose",
@@ -46,6 +82,25 @@ class ServerProtocolTests(unittest.TestCase):
             "pose": {"x_m": float("nan"), "y_m": 0.751, "yaw_rad": 0.0},
         }
         self.assertEqual(validate_vehicle_pose(msg), (False, "invalid_pose:x_m"))
+
+    def test_runtime_status_accepts_read_only_telemetry(self) -> None:
+        self.assertEqual(validate_runtime_status(self.runtime_status()), (True, "ok"))
+
+    def test_runtime_status_rejects_valid_tracker_without_trajectory(self) -> None:
+        msg = self.runtime_status()
+        msg["tracker"]["trajectory_id"] = 0
+        self.assertEqual(
+            validate_runtime_status(msg),
+            (False, "tracker_valid_without_trajectory"),
+        )
+
+    def test_runtime_status_requires_boolean_uart_policy(self) -> None:
+        msg = self.runtime_status()
+        msg["uart"]["tx_enabled"] = 0
+        self.assertEqual(
+            validate_runtime_status(msg),
+            (False, "invalid_bool:uart.tx_enabled"),
+        )
 
     def test_parking_status_requires_exactly_all_four_slots(self) -> None:
         msg = {

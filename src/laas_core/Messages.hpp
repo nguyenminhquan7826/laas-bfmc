@@ -147,6 +147,35 @@ struct ParkingTrajectoryMsg {
     std::vector<ParkingTrajectoryPoint> points;
 };
 
+// Read-only parking/runtime telemetry sent to the Server monitoring backend.
+// This message never carries actuator commands or motion authorization.
+struct ParkingRuntimeStatusMsg {
+    Header header;
+    std::uint64_t sequence = 0;
+    std::string vehicle_id = "car_01";
+    std::string map_id;
+    OperatingMode operating_mode = OperatingMode::LANE_DRIVING;
+
+    bool tracker_valid = false;
+    bool tracker_goal_reached = false;
+    std::uint64_t trajectory_id = 0;
+    std::uint64_t nearest_index = 0;
+    std::uint64_t target_index = 0;
+    double cross_track_error_m = 0.0;
+
+    bool safety_evaluated = false;
+    bool safety_motion_allowed = false;
+    std::string safety_reason = "NOT_EVALUATED";
+
+    bool uart_rx_enabled = false;
+    bool uart_tx_enabled = false;
+    bool telemetry_valid = false;
+    std::uint64_t telemetry_age_ms = 0;
+
+    bool session_sync_hold = true;
+    std::string session_sync_reason = "NOT_CONNECTED";
+};
+
 struct EncoderTelemetry {
     bool valid = false;
 

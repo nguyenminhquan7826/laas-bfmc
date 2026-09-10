@@ -294,6 +294,79 @@ bool ParkingProtocol::encodeParkingStatus(const ParkingStatusMsg& msg,
     return true;
 }
 
+bool ParkingProtocol::encodeRuntimeStatus(const ParkingRuntimeStatusMsg& msg,
+                                          std::string& line,
+                                          std::string& reason)
+{
+    if (!msg.header.valid || msg.vehicle_id.empty() || msg.map_id.empty() ||
+        msg.safety_reason.empty() || msg.session_sync_reason.empty() ||
+        !finite(msg.cross_track_error_m) || msg.cross_track_error_m < 0.0 ||
+        (msg.tracker_valid && msg.trajectory_id == 0U)) {
+        reason = "invalid_runtime_status";
+        return false;
+    }
+
+    json_object* object = makeBase("runtime_status");
+    addUnsigned(object, "seq", msg.sequence);
+    addUnsigned(object, "timestamp_ms", msg.header.timestamp_ms);
+    json_object_object_add(object, "vehicle_id",
+                           json_object_new_string(msg.vehicle_id.c_str()));
+    json_object_object_add(object, "map_id",
+                           json_object_new_string(msg.map_id.c_str()));
+    json_object_object_add(
+        object, "operating_mode",
+        json_object_new_string(
+            msg.operating_mode == OperatingMode::PARKING ? "PARKING" : "LANE"));
+
+    json_object* tracker = json_object_new_object();
+    json_object_object_add(tracker, "valid",
+                           json_object_new_boolean(msg.tracker_valid));
+    json_object_object_add(tracker, "goal_reached",
+                           json_object_new_boolean(msg.tracker_goal_reached));
+    addUnsigned(tracker, "trajectory_id", msg.trajectory_id);
+    addUnsigned(tracker, "nearest_index", msg.nearest_index);
+    addUnsigned(tracker, "target_index", msg.target_index);
+    json_object_object_add(tracker, "cross_track_error_m",
+                           json_object_new_double(msg.cross_track_error_m));
+    json_object_object_add(object, "tracker", tracker);
+
+    json_object* safety = json_object_new_object();
+    json_object_object_add(safety, "evaluated",
+                           json_object_new_boolean(msg.safety_evaluated));
+    json_object_object_add(safety, "motion_allowed",
+                           json_object_new_boolean(msg.safety_motion_allowed));
+    json_object_object_add(safety, "reason",
+                           json_object_new_string(msg.safety_reason.c_str()));
+    json_object_object_add(object, "safety", safety);
+
+    json_object* uart = json_object_new_object();
+    json_object_object_add(uart, "rx_enabled",
+                           json_object_new_boolean(msg.uart_rx_enabled));
+    json_object_object_add(uart, "tx_enabled",
+                           json_object_new_boolean(msg.uart_tx_enabled));
+    json_object_object_add(uart, "telemetry_valid",
+                           json_object_new_boolean(msg.telemetry_valid));
+    addUnsigned(uart, "telemetry_age_ms", msg.telemetry_age_ms);
+    json_object_object_add(object, "uart", uart);
+
+    json_object* session_sync = json_object_new_object();
+    json_object_object_add(session_sync, "hold",
+                           json_object_new_boolean(msg.session_sync_hold));
+    json_object_object_add(
+        session_sync, "reason",
+        json_object_new_string(msg.session_sync_reason.c_str()));
+    json_object_object_add(object, "session_sync", session_sync);
+
+    line = dumpJson(object);
+    json_object_put(object);
+    if (line.empty()) {
+        reason = "json_encode_failed";
+        return false;
+    }
+    reason = "ok";
+    return true;
+}
+
 bool ParkingProtocol::encodePlanRequest(std::uint64_t sequence,
                                         std::uint64_t timestamp_ms,
                                         const std::string& map_id,

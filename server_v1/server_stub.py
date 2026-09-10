@@ -23,6 +23,7 @@ from typing import Any, Dict, Optional
 from hybrid_astar_v1 import HybridAStarPlanner, Node, Pose, build_slot_obstacles, load_yaml
 from slot_selector_v1 import SlotPlan, choose_best_free_slot
 from parking_session_v1 import ParkingSession
+from monitoring_v1 import MonitoringHTTPServer, VehicleStateStore
 
 PROTOCOL_VERSION = 1
 MAP_ID = "map_v1"
@@ -31,6 +32,7 @@ SLOT_STATES = {"UNKNOWN", "FREE", "OCCUPIED"}
 ALLOWED_DIRECTIONS = {"FORWARD", "REVERSE"}
 TRAJECTORY_STATUSES = {"RECEIVED", "EXECUTING", "PAUSED", "COMPLETED", "REJECTED", "REPLAN_REQUESTED"}
 SAFETY_EVENTS = {"PEDESTRIAN_BLOCKING", "CRITICAL_OBSTACLE", "TRAJECTORY_INVALID", "SERVER_TIMEOUT", "SAFETY_CLEARED"}
+OPERATING_MODES = {"LANE", "PARKING"}
 
 DEFAULT_POSE_MAX_AGE_MS = 2000
 DEFAULT_PARKING_MAX_AGE_MS = 3000
@@ -144,6 +146,74 @@ def validate_safety_event(msg: dict[str, Any]) -> tuple[bool, str]:
     return True, "ok"
 
 
+def validate_runtime_status(msg: dict[str, Any]) -> tuple[bool, str]:
+    ok, reason = validate_common(msg)
+    if not ok:
+        return ok, reason
+    ok, reason = validate_seq_and_timestamp(msg)
+    if not ok:
+        return ok, reason
+    if msg.get("map_id") != MAP_ID:
+        return False, "map_id_required"
+    vehicle_id = msg.get("vehicle_id")
+    if (not isinstance(vehicle_id, str) or not vehicle_id or
+            len(vehicle_id) > 64 or
+            not all(ch.isalnum() or ch in "_-" for ch in vehicle_id)):
+        return False, "invalid_vehicle_id"
+    if msg.get("operating_mode") not in OPERATING_MODES:
+        return False, "invalid_operating_mode"
+
+    tracker = msg.get("tracker")
+    safety = msg.get("safety")
+    uart = msg.get("uart")
+    session_sync = msg.get("session_sync")
+    for name, value in (
+        ("tracker", tracker),
+        ("safety", safety),
+        ("uart", uart),
+        ("session_sync", session_sync),
+    ):
+        if not isinstance(value, dict):
+            return False, f"{name}_not_object"
+
+    for name, value in (
+        ("tracker.valid", tracker.get("valid")),
+        ("tracker.goal_reached", tracker.get("goal_reached")),
+        ("safety.evaluated", safety.get("evaluated")),
+        ("safety.motion_allowed", safety.get("motion_allowed")),
+        ("uart.rx_enabled", uart.get("rx_enabled")),
+        ("uart.tx_enabled", uart.get("tx_enabled")),
+        ("uart.telemetry_valid", uart.get("telemetry_valid")),
+        ("session_sync.hold", session_sync.get("hold")),
+    ):
+        if not isinstance(value, bool):
+            return False, f"invalid_bool:{name}"
+
+    for name, value in (
+        ("tracker.trajectory_id", tracker.get("trajectory_id")),
+        ("tracker.nearest_index", tracker.get("nearest_index")),
+        ("tracker.target_index", tracker.get("target_index")),
+        ("uart.telemetry_age_ms", uart.get("telemetry_age_ms")),
+    ):
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            return False, f"invalid_nonnegative_int:{name}"
+
+    cte = tracker.get("cross_track_error_m")
+    if (not isinstance(cte, (int, float)) or isinstance(cte, bool) or
+            not math.isfinite(float(cte)) or float(cte) < 0.0):
+        return False, "invalid_cross_track_error_m"
+    if tracker["valid"] and tracker["trajectory_id"] <= 0:
+        return False, "tracker_valid_without_trajectory"
+
+    for name, value in (
+        ("safety.reason", safety.get("reason")),
+        ("session_sync.reason", session_sync.get("reason")),
+    ):
+        if not isinstance(value, str) or not value or len(value) > 160:
+            return False, f"invalid_string:{name}"
+    return True, "ok"
+
+
 def slot_states_from_status(msg: dict[str, Any]) -> Dict[str, str]:
     return {str(s["id"]): str(s["state"]).upper() for s in msg["slots"]}
 
@@ -151,6 +221,26 @@ def slot_states_from_status(msg: dict[str, Any]) -> Dict[str, str]:
 def pose_from_message(msg: dict[str, Any]) -> Pose:
     p = msg["pose"]
     return Pose(float(p["x_m"]), float(p["y_m"]), float(p["yaw_rad"]))
+
+
+def monitoring_map_metadata(ctx: "ServerContext") -> dict[str, Any]:
+    map_cfg = ctx.map_cfg
+    map_section = map_cfg.get("map", {})
+    slots = []
+    for slot in map_cfg.get("slots", []):
+        slots.append({
+            "id": slot.get("id"),
+            "row": slot.get("row"),
+            "polygon_m": slot.get("polygon_m"),
+            "center_m": slot.get("center_m"),
+        })
+    return {
+        "map_id": str(map_cfg.get("map_id", MAP_ID)),
+        "frame": map_cfg.get("frame", {}),
+        "width_x_m": float(map_section.get("width_x_m", 0.0)),
+        "height_y_m": float(map_section.get("height_y_m", 0.0)),
+        "slots": slots,
+    }
 
 
 def trajectory_points(selected: SlotPlan, nominal_speed: float) -> list[dict[str, Any]]:
@@ -182,6 +272,7 @@ class ServerContext:
         planning_enabled: bool,
         pose_max_age_ms: int = DEFAULT_POSE_MAX_AGE_MS,
         parking_max_age_ms: int = DEFAULT_PARKING_MAX_AGE_MS,
+        vehicle_offline_after_ms: int = 3000,
     ):
         self.root = root
         self.planning_enabled = planning_enabled
@@ -207,6 +298,9 @@ class ServerContext:
 
         self.trajectory_id = 0
         self.session = ParkingSession()
+        self.monitoring = VehicleStateStore(
+            offline_after_ms=vehicle_offline_after_ms
+        )
 
     def next_trajectory_id(self) -> int:
         with self.state_lock:
@@ -445,8 +539,20 @@ class Handler(socketserver.StreamRequestHandler):
         return self.server.context  # type: ignore[attr-defined]
 
     def send_json(self, obj: dict[str, Any]) -> None:
+        session = obj.get("session")
+        if isinstance(session, dict) and hasattr(self, "monitor_connection_id"):
+            self.ctx.monitoring.update_session(
+                self.monitor_connection_id, session
+            )
         self.wfile.write((json.dumps(obj, separators=(",", ":")) + "\n").encode("utf-8"))
         self.wfile.flush()
+
+    def record_accepted(self, msg: dict[str, Any]) -> None:
+        self.ctx.monitoring.accept_message(
+            self.monitor_connection_id,
+            msg,
+            self.ctx.session.snapshot(),
+        )
 
     def send_ack(self, msg: dict[str, Any], ok: bool, reason: str) -> None:
         self.send_json({
@@ -582,6 +688,10 @@ class Handler(socketserver.StreamRequestHandler):
 
     def handle(self) -> None:
         peer = f"{self.client_address[0]}:{self.client_address[1]}"
+        self.monitor_connection_id = f"{peer}:{id(self)}"
+        self.ctx.monitoring.connection_opened(
+            self.monitor_connection_id, peer
+        )
         print(f"[SERVER] connected {peer}")
         try:
             for raw in self.rfile:
@@ -601,6 +711,7 @@ class Handler(socketserver.StreamRequestHandler):
                         pose = pose_from_message(msg)
                         self.ctx.set_pose(pose, msg.get("seq"))
                         self.ctx.session.ensure_started("vehicle_pose_received")
+                        self.record_accepted(msg)
                         print(
                             f"[POSE] seq={msg.get('seq')} x={pose.x:.3f} y={pose.y:.3f} "
                             f"yaw={math.degrees(pose.yaw):.1f}deg"
@@ -618,6 +729,7 @@ class Handler(socketserver.StreamRequestHandler):
                     if ok:
                         self.ctx.set_parking_status(msg)
                         self.ctx.session.ensure_started("parking_status_received")
+                        self.record_accepted(msg)
                         states = slot_states_from_status(msg)
                         free_slots = [s["id"] for s in msg["slots"] if s["state"] == "FREE"]
                         print(f"[PARKING] seq={msg.get('seq')} free={free_slots}")
@@ -674,6 +786,7 @@ class Handler(socketserver.StreamRequestHandler):
                                 self.ctx.session.request_replan(f"trajectory_status_{status}")
                                 trigger_replan = True
                         if ok:
+                            self.record_accepted(msg)
                             print(f"[TRAJECTORY_STATUS] tid={tid} status={status} session={self.ctx.session.snapshot()['state']}")
                     self.send_ack(msg, ok, reason)
                     if ok and trigger_replan:
@@ -701,10 +814,17 @@ class Handler(socketserver.StreamRequestHandler):
                                 ok, reason = self.ctx.session.clear_safety_and_request_replan("safety_cleared")
                                 trigger_replan = ok
                         if ok:
+                            self.record_accepted(msg)
                             print(f"[SAFETY_EVENT] event={event} tid={tid} session={self.ctx.session.snapshot()['state']}")
                     self.send_ack(msg, ok, reason)
                     if ok and trigger_replan:
                         self.plan_with_latest_state(msg.get("seq"), trigger="safety_clear_or_invalid")
+
+                elif msg_type == "runtime_status":
+                    ok, reason = validate_runtime_status(msg)
+                    if ok:
+                        self.record_accepted(msg)
+                    self.send_ack(msg, ok, reason)
 
                 elif msg_type == "session_query":
                     ok, reason = validate_common(msg)
@@ -725,6 +845,9 @@ class Handler(socketserver.StreamRequestHandler):
                         "reason": "unsupported_message_type",
                     })
         finally:
+            self.ctx.monitoring.connection_closed(
+                self.monitor_connection_id
+            )
             print(f"[SERVER] disconnected {peer}")
 
 
@@ -744,10 +867,17 @@ def main() -> None:
     parser.add_argument("--transport-only", action="store_true", help="disable Hybrid A* and behave as transport/validation server only")
     parser.add_argument("--pose-max-age-ms", type=int, default=DEFAULT_POSE_MAX_AGE_MS)
     parser.add_argument("--parking-max-age-ms", type=int, default=DEFAULT_PARKING_MAX_AGE_MS)
+    parser.add_argument("--monitor-host", default="0.0.0.0")
+    parser.add_argument("--monitor-port", type=int, default=5005)
+    parser.add_argument("--vehicle-offline-after-ms", type=int, default=3000)
+    parser.add_argument("--no-monitoring", action="store_true", help="disable the read-only HTTP monitoring API")
     args = parser.parse_args()
 
-    if args.pose_max_age_ms <= 0 or args.parking_max_age_ms <= 0:
+    if (args.pose_max_age_ms <= 0 or args.parking_max_age_ms <= 0 or
+            args.vehicle_offline_after_ms <= 0):
         raise SystemExit("staleness thresholds must be positive")
+    if not args.no_monitoring and args.monitor_port == args.port:
+        raise SystemExit("monitor-port must differ from the parking TCP port")
 
     root = Path(__file__).resolve().parent
     ctx = ServerContext(
@@ -755,7 +885,31 @@ def main() -> None:
         planning_enabled=not args.transport_only,
         pose_max_age_ms=args.pose_max_age_ms,
         parking_max_age_ms=args.parking_max_age_ms,
+        vehicle_offline_after_ms=args.vehicle_offline_after_ms,
     )
+
+    monitor_server = None
+    monitor_thread = None
+    if not args.no_monitoring:
+        monitor_server = MonitoringHTTPServer(
+            (args.monitor_host, args.monitor_port),
+            ctx.monitoring,
+            PROTOCOL_VERSION,
+            MAP_ID,
+            root / "dashboard" / "frontend" / "dist" / "dashboard" / "browser",
+            monitoring_map_metadata(ctx),
+            root / "map_reference.png",
+        )
+        monitor_thread = threading.Thread(
+            target=monitor_server.serve_forever,
+            name="monitoring-http",
+            daemon=True,
+        )
+        monitor_thread.start()
+        print(
+            f"[MONITOR] read-only API http://{args.monitor_host}:"
+            f"{monitor_server.server_address[1]}"
+        )
 
     with ReusableTCPServer((args.host, args.port), Handler, ctx) as server:
         mode = "transport-only" if args.transport_only else "hybrid-a*-offline"
@@ -770,6 +924,12 @@ def main() -> None:
             server.serve_forever()
         except KeyboardInterrupt:
             print("\n[SERVER] stopped by user")
+        finally:
+            if monitor_server is not None:
+                monitor_server.shutdown()
+                monitor_server.server_close()
+            if monitor_thread is not None:
+                monitor_thread.join(timeout=2.0)
 
 
 if __name__ == "__main__":

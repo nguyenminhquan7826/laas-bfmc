@@ -291,6 +291,12 @@ bool ParkingServerClient::sendParkingStatus(const ParkingStatusMsg& msg)
     return ParkingProtocol::encodeParkingStatus(msg, line, reason) && queueLine(line);
 }
 
+bool ParkingServerClient::sendRuntimeStatus(const ParkingRuntimeStatusMsg& msg)
+{
+    std::string line, reason;
+    return ParkingProtocol::encodeRuntimeStatus(msg, line, reason) && queueLine(line);
+}
+
 bool ParkingServerClient::sendPlanRequest(std::uint64_t sequence, bool new_session)
 {
     std::string line, reason;

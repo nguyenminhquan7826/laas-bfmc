@@ -38,6 +38,59 @@ vehicle_pose + parking_status
 - Automatic replan if the active target slot stops being `FREE`.
 - Safety pause mirroring for `PEDESTRIAN_BLOCKING`/`CRITICAL_OBSTACLE`.
 - `SAFETY_CLEARED` triggers a fresh replan; the old trajectory is never blindly resumed.
+- BFMC-inspired Angular 18 monitoring dashboard, served by the read-only HTTP
+  backend.
+
+## Step 13 monitoring dashboard and API
+
+The monitoring service starts with the parking server on TCP port `5005` by
+default. It has no command or actuator endpoint.
+
+```text
+GET /api/health
+GET /api/vehicles
+GET /api/vehicles/{vehicle_id}/status
+GET /api/map
+GET /api/map/reference
+GET /api/events                    # Server-Sent Events
+```
+
+Example:
+
+```powershell
+py server_stub.py --port 5000 --monitor-port 5005
+```
+
+Build the dashboard once:
+
+```powershell
+cd dashboard/frontend
+npm install
+npm run build
+cd ../..
+```
+
+Then open `http://127.0.0.1:5005/`. The dashboard exposes the latest
+protocol-validated Encoder-IMU pose, parking slots, trajectory/session status,
+tracker progress/error, safety gate, UART RX/TX policy, connection state, and
+receive age. SSE updates the screen every 500 ms; REST polling is the fallback.
+
+For frontend development, keep the Python server on port 5005 and run:
+
+```powershell
+cd dashboard/frontend
+npm start
+```
+
+Then open `http://127.0.0.1:4200/`. The development build automatically uses
+the monitoring API at the same host on port 5005.
+
+The UI architecture follows the official Bosch Future Mobility Challenge
+Angular dashboard, reduced to localization/parking monitoring. Attribution is
+recorded in `dashboard/frontend/THIRD_PARTY_NOTICES.md`.
+
+Use `--no-monitoring` only for a transport/planner test that does not need the
+HTTP endpoint.
 
 ## Prototype staleness defaults
 

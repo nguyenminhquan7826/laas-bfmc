@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "map_id": "map_v1",
-  "package_version": 1,
-  "package_sha256": "6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed",
+  "package_version": 2,
+  "package_sha256": "185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7",
   "yaw_convention": "MAP_CCW_POSITIVE_SENSOR_CW_CONVERTED_AT_PI",
   "files": [
     {
       "path": "map_v1.yaml",
-      "size_bytes": 5403,
-      "sha256": "2549e498b8c745b8dc6fb217bfda45b431ddff3846fcae737db64627fbfc9329"
+      "size_bytes": 5813,
+      "sha256": "ddd20e37c4748a4b8c337907851809c875b09fa71052d407343a76280ea58fe1"
     },
     {
       "path": "vehicle_v1.yaml",

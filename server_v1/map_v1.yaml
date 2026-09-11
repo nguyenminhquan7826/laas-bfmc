@@ -50,7 +50,10 @@ slots:
   center_m:
   - 2.137512
   - 0.398974
-  goal_pose: null
+  goal_pose:
+    reference_point: body_center
+    parking_type: PARALLEL
+    yaw_rad: 0.0
 - id: P_B2
   state_default: UNKNOWN
   geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
@@ -67,7 +70,10 @@ slots:
   center_m:
   - 2.953155
   - 0.398974
-  goal_pose: null
+  goal_pose:
+    reference_point: body_center
+    parking_type: PARALLEL
+    yaw_rad: 0.0
 - id: P_T1
   state_default: UNKNOWN
   geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
@@ -84,7 +90,10 @@ slots:
   center_m:
   - 2.140588
   - 1.161744
-  goal_pose: null
+  goal_pose:
+    reference_point: body_center
+    parking_type: PARALLEL
+    yaw_rad: 3.141592653589793
 - id: P_T2
   state_default: UNKNOWN
   geometry_source: CAD_PDF_PAINT_MARKING_CENTERLINE
@@ -101,15 +110,19 @@ slots:
   center_m:
   - 2.955993
   - 1.161744
-  goal_pose: null
+  goal_pose:
+    reference_point: body_center
+    parking_type: PARALLEL
+    yaw_rad: 3.141592653589793
 notes:
 - The CAD PDF is the authoritative visual geometry source for map_v1.
 - For parking-slot geometry in planner tests, CAD paint-marking centerlines are authoritative
   because the uploaded PDF is the exact map.
 - Previous manual parking dimensions are preserved under legacy_manual_parking_measurements
   for later physical cross-check.
-- goal_pose fields remain unset; slot_selector_v1 computes the exact rear-axle goal
-  from the measured rear-axle-to-body-center offset.
+- All four spaces are parallel-parking spaces. Their explicit body-center goal
+  yaw is bottom row +X (0 rad) and top row -X (pi rad). slot_selector_v1 converts
+  this body pose to the exact rear-axle goal using measured geometry.
 - UNKNOWN must never be treated as FREE by the server slot selector.
 - Do not use white paint markings themselves as collision obstacles; drivable-area
   semantics are classified separately.

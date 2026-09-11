@@ -90,7 +90,7 @@ struct ParkingConfig {
 
     std::string map_id = "map_v1";
     std::string map_package_sha256 =
-        "6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed";
+        "185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7";
     std::string server_host = "127.0.0.1";
     int server_port = 5000;
     int reconnect_period_ms = 1000;

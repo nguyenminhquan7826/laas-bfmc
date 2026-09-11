@@ -28,7 +28,7 @@ package. Matching only `map_id` is insufficient.
 Used only with `--planning-owner client`:
 
 ```json
-{"type":"navigation_decision","version":1,"decision_id":85,"source_seq":152,"timestamp_ms":1787730000150,"map_id":"map_v1","map_package_sha256":"6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed","planning_owner":"client","maneuver":"PARK_AT_SLOT","target_slot":"P_B2","local_planner":"HYBRID_A_STAR","trigger":"parking_status"}
+{"type":"navigation_decision","version":1,"decision_id":85,"source_seq":152,"timestamp_ms":1787730000150,"map_id":"map_v1","map_package_sha256":"185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7","planning_owner":"client","maneuver":"PARK_AT_SLOT","target_slot":"P_B2","local_planner":"HYBRID_A_STAR","trigger":"parking_status"}
 ```
 
 The server chooses the navigation objective. The Pi owns path feasibility,
@@ -62,7 +62,7 @@ Used only with client-owned planning. This is read-only monitoring data, not an
 actuator command:
 
 ```json
-{"type":"local_trajectory","version":1,"seq":154,"timestamp_ms":1787730000300,"decision_id":85,"trajectory_id":85,"source_seq":152,"map_id":"map_v1","map_package_sha256":"6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed","planning_owner":"client","target_slot":"P_B2","reference_point":"rear_axle_center","goal_mode":"forward","validation":"PASS","points":[{"x_m":1.3,"y_m":0.751,"yaw_rad":0.0,"v_ref_mps":0.1,"direction":"FORWARD"}]}
+{"type":"local_trajectory","version":1,"seq":154,"timestamp_ms":1787730000300,"decision_id":85,"trajectory_id":85,"source_seq":152,"map_id":"map_v1","map_package_sha256":"185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7","planning_owner":"client","target_slot":"P_B2","reference_point":"rear_axle_center","goal_mode":"forward","validation":"PASS","points":[{"x_m":1.3,"y_m":0.751,"yaw_rad":0.0,"v_ref_mps":0.1,"direction":"FORWARD"}]}
 ```
 
 The server checks the active decision ID, map package, target, current parking

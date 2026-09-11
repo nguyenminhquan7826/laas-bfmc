@@ -2,7 +2,7 @@
   "schema_version": 1,
   "map_id": "map_v1",
   "planner_id": "hybrid_astar_v1",
-  "collision_mode": "REAR_AXLE_POINT_ONLY",
+  "collision_mode": "FULL_FOOTPRINT",
   "drivable_area": "DRIVABLE_AREA_V1_ACTIVE",
   "slot_states": {
     "P_B1": "OCCUPIED",
@@ -21,24 +21,24 @@
       "expect_feasible": true,
       "actual_feasible": true,
       "selected_slot": "P_B2",
-      "elapsed_ms": 396.143,
+      "elapsed_ms": 1849.016,
       "pass": true,
       "candidates": [
         {
           "slot_id": "P_B2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 3.315,
-          "expansions": 4386,
-          "nodes": 24
+          "cost": 4.325,
+          "expansions": 2447,
+          "nodes": 29
         },
         {
           "slot_id": "P_T2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 3.47,
-          "expansions": 5427,
-          "nodes": 25
+          "cost": 5.81,
+          "expansions": 4784,
+          "nodes": 31
         }
       ]
     },
@@ -52,54 +52,54 @@
       "expect_feasible": true,
       "actual_feasible": true,
       "selected_slot": "P_B2",
-      "elapsed_ms": 601.325,
+      "elapsed_ms": 2065.882,
       "pass": true,
       "candidates": [
         {
           "slot_id": "P_B2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 4.315,
-          "expansions": 6216,
-          "nodes": 34
+          "cost": 5.245,
+          "expansions": 2045,
+          "nodes": 39
         },
         {
           "slot_id": "P_T2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 4.6,
-          "expansions": 8305,
-          "nodes": 34
+          "cost": 7.195,
+          "expansions": 5121,
+          "nodes": 42
         }
       ]
     },
     {
       "id": "right_vertical",
       "start": {
-        "x": 4.0,
+        "x": 4.1,
         "y": 1.5,
         "yaw_deg": -90.0
       },
       "expect_feasible": true,
       "actual_feasible": true,
-      "selected_slot": "P_B2",
-      "elapsed_ms": 633.502,
+      "selected_slot": "P_T2",
+      "elapsed_ms": 3972.514,
       "pass": true,
       "candidates": [
         {
           "slot_id": "P_B2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 3.62,
-          "expansions": 4118,
-          "nodes": 23
+          "cost": 8.28,
+          "expansions": 5578,
+          "nodes": 36
         },
         {
           "slot_id": "P_T2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 4.035,
-          "expansions": 11657,
+          "cost": 5.76,
+          "expansions": 1509,
           "nodes": 26
         }
       ]
@@ -113,25 +113,25 @@
       },
       "expect_feasible": true,
       "actual_feasible": true,
-      "selected_slot": "P_B2",
-      "elapsed_ms": 283.492,
+      "selected_slot": "P_T2",
+      "elapsed_ms": 1519.2,
       "pass": true,
       "candidates": [
         {
           "slot_id": "P_B2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 2.515,
-          "expansions": 2990,
-          "nodes": 16
+          "cost": 4.69,
+          "expansions": 4144,
+          "nodes": 24
         },
         {
           "slot_id": "P_T2",
           "success": true,
           "reason": "goal_reached",
-          "cost": 2.67,
-          "expansions": 4025,
-          "nodes": 17
+          "cost": 2.09,
+          "expansions": 555,
+          "nodes": 13
         }
       ]
     },
@@ -145,13 +145,13 @@
       "expect_feasible": false,
       "actual_feasible": false,
       "selected_slot": null,
-      "elapsed_ms": 0.039,
+      "elapsed_ms": 0.058,
       "pass": true,
       "candidates": [
         {
           "slot_id": "P_B2",
           "success": false,
-          "reason": "start_outside_drivable_area",
+          "reason": "start_footprint_outside_drivable_area",
           "cost": null,
           "expansions": 0,
           "nodes": 0
@@ -159,7 +159,7 @@
         {
           "slot_id": "P_T2",
           "success": false,
-          "reason": "start_outside_drivable_area",
+          "reason": "start_footprint_outside_drivable_area",
           "cost": null,
           "expansions": 0,
           "nodes": 0

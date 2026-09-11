@@ -19,7 +19,7 @@ void require(bool condition, const char* message)
 int main()
 {
     const std::string hash =
-        "6a61bff5fcd280bf3f630d6644ee65b0d07842e75bc6a03f6fe8f2db519cb9ed";
+        "185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7";
     const std::string line =
         "{\"type\":\"navigation_decision\",\"version\":1,"
         "\"decision_id\":4,\"source_seq\":12,\"timestamp_ms\":1000,"

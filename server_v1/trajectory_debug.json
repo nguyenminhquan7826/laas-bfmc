@@ -4,11 +4,11 @@
   "trajectory_id": 1,
   "target_slot": "P_B2",
   "map_id": "map_v1",
-  "prototype_warning": "OFFLINE_ONLY_REAR_AXLE_POINT_COLLISION",
+  "prototype_warning": "OFFLINE_ONLY_FULL_FOOTPRINT_COLLISION_NO_ACTUATION",
   "points": [
     {
       "x": 1.3,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -16,7 +16,7 @@
     },
     {
       "x": 1.4,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -24,7 +24,7 @@
     },
     {
       "x": 1.5,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -32,7 +32,7 @@
     },
     {
       "x": 1.6,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -40,7 +40,7 @@
     },
     {
       "x": 1.7,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -48,7 +48,7 @@
     },
     {
       "x": 1.8,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -56,7 +56,7 @@
     },
     {
       "x": 1.9,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -64,7 +64,7 @@
     },
     {
       "x": 2.0,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -72,7 +72,7 @@
     },
     {
       "x": 2.1,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -80,7 +80,7 @@
     },
     {
       "x": 2.2,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -88,7 +88,7 @@
     },
     {
       "x": 2.3,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -96,7 +96,7 @@
     },
     {
       "x": 2.4,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -104,7 +104,7 @@
     },
     {
       "x": 2.5,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
@@ -112,91 +112,131 @@
     },
     {
       "x": 2.6,
-      "y": 0.7511,
+      "y": 0.751,
       "yaw": 0.0,
       "v_ref": 0.1,
       "direction": "FORWARD",
       "steering_deg_debug": 0.0
     },
     {
-      "x": 2.7,
-      "y": 0.7511,
-      "yaw": 0.0,
+      "x": 2.69966,
+      "y": 0.74428,
+      "yaw": -0.168435,
+      "v_ref": 0.1,
+      "direction": "FORWARD",
+      "steering_deg_debug": -22.835
+    },
+    {
+      "x": 2.79678,
+      "y": 0.72094,
+      "yaw": -0.336871,
+      "v_ref": 0.1,
+      "direction": "FORWARD",
+      "steering_deg_debug": -22.835
+    },
+    {
+      "x": 2.89306,
+      "y": 0.69434,
+      "yaw": -0.168435,
+      "v_ref": 0.1,
+      "direction": "FORWARD",
+      "steering_deg_debug": 22.835
+    },
+    {
+      "x": 2.99244,
+      "y": 0.68427,
+      "yaw": -0.0,
+      "v_ref": 0.1,
+      "direction": "FORWARD",
+      "steering_deg_debug": 22.835
+    },
+    {
+      "x": 3.0921,
+      "y": 0.69099,
+      "yaw": 0.168435,
+      "v_ref": 0.1,
+      "direction": "FORWARD",
+      "steering_deg_debug": 22.835
+    },
+    {
+      "x": 3.19068,
+      "y": 0.70776,
+      "yaw": 0.168435,
       "v_ref": 0.1,
       "direction": "FORWARD",
       "steering_deg_debug": 0.0
     },
     {
-      "x": 2.79959,
-      "y": 0.7585,
-      "yaw": 0.185411,
+      "x": 3.28927,
+      "y": 0.72452,
+      "yaw": 0.168435,
       "v_ref": 0.1,
       "direction": "FORWARD",
-      "steering_deg_debug": 25.0
+      "steering_deg_debug": 0.0
     },
     {
-      "x": 2.89611,
-      "y": 0.78413,
-      "yaw": 0.370821,
+      "x": 3.38639,
+      "y": 0.74786,
+      "yaw": 0.336871,
       "v_ref": 0.1,
       "direction": "FORWARD",
-      "steering_deg_debug": 25.0
+      "steering_deg_debug": 22.835
     },
     {
-      "x": 2.98624,
-      "y": 0.82712,
-      "yaw": 0.556232,
-      "v_ref": 0.1,
-      "direction": "FORWARD",
-      "steering_deg_debug": 25.0
-    },
-    {
-      "x": 3.06691,
-      "y": 0.88598,
-      "yaw": 0.741642,
-      "v_ref": 0.1,
-      "direction": "FORWARD",
-      "steering_deg_debug": 25.0
-    },
-    {
-      "x": 2.99848,
-      "y": 0.81325,
-      "yaw": 0.927053,
+      "x": 3.29456,
+      "y": 0.70857,
+      "yaw": 0.505306,
       "v_ref": -0.1,
       "direction": "REVERSE",
-      "steering_deg_debug": -25.0
+      "steering_deg_debug": -22.835
     },
     {
-      "x": 2.94462,
-      "y": 0.72916,
-      "yaw": 1.112464,
+      "x": 3.21061,
+      "y": 0.65444,
+      "yaw": 0.673742,
       "v_ref": -0.1,
       "direction": "REVERSE",
-      "steering_deg_debug": -25.0
+      "steering_deg_debug": -22.835
     },
     {
-      "x": 2.9072,
-      "y": 0.63657,
-      "yaw": 1.297874,
+      "x": 3.13246,
+      "y": 0.59205,
+      "yaw": 0.673742,
       "v_ref": -0.1,
       "direction": "REVERSE",
-      "steering_deg_debug": -25.0
+      "steering_deg_debug": 0.0
     },
     {
-      "x": 2.88748,
-      "y": 0.53868,
-      "yaw": 1.483285,
+      "x": 3.05431,
+      "y": 0.52966,
+      "yaw": 0.673742,
       "v_ref": -0.1,
       "direction": "REVERSE",
-      "steering_deg_debug": -25.0
+      "steering_deg_debug": 0.0
     },
     {
-      "x": 2.88615,
-      "y": 0.43882,
-      "yaw": 1.668695,
+      "x": 2.97223,
+      "y": 0.47273,
+      "yaw": 0.505306,
       "v_ref": -0.1,
       "direction": "REVERSE",
-      "steering_deg_debug": -25.0
+      "steering_deg_debug": 22.835
+    },
+    {
+      "x": 2.88177,
+      "y": 0.43038,
+      "yaw": 0.336871,
+      "v_ref": -0.1,
+      "direction": "REVERSE",
+      "steering_deg_debug": 22.835
+    },
+    {
+      "x": 2.78549,
+      "y": 0.40378,
+      "yaw": 0.168435,
+      "v_ref": -0.1,
+      "direction": "REVERSE",
+      "steering_deg_debug": 22.835
     }
   ]
 }

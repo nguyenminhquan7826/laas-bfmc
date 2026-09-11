@@ -43,6 +43,9 @@ STOP/HOLD layer.
 
 - CAD-derived `map_v1` and `DRIVABLE_AREA V1`.
 - Four parking slots: `P_B1`, `P_B2`, `P_T1`, `P_T2`.
+- All four slots are parallel-parking spaces. Their map-owned body-center goal
+  yaw is `0` on the bottom row and `pi` on the top row; the selector converts
+  that pose to the planner's rear-axle reference point.
 - States: `UNKNOWN`, `FREE`, `OCCUPIED`; only `FREE` is selectable.
 - Rear-axle-center Hybrid A* reference point.
 - Forward and reverse motion primitives.

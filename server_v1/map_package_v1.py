@@ -43,7 +43,7 @@ def build_manifest(root: Path) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "map_id": "map_v1",
-        "package_version": 1,
+        "package_version": 2,
         "package_sha256": package_digest.hexdigest(),
         "yaw_convention": "MAP_CCW_POSITIVE_SENSOR_CW_CONVERTED_AT_PI",
         "files": files,

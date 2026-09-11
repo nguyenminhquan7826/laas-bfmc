@@ -26,7 +26,10 @@ def main() -> None:
     cases = [
         {"id": "local_left", "start": [1.30, 0.7511, 0.0], "expect_feasible": True},
         {"id": "lower_left", "start": [0.30, 0.70, 0.0], "expect_feasible": True},
-        {"id": "right_vertical", "start": [4.00, 1.50, -90.0], "expect_feasible": True},
+        # x=4.00 was only valid with the retired rear-axle-point collision
+        # check. At x=4.10 the complete vehicle footprint is inside the same
+        # right-hand vertical road segment.
+        {"id": "right_vertical", "start": [4.10, 1.50, -90.0], "expect_feasible": True},
         {"id": "lower_right", "start": [3.80, 0.75, 180.0], "expect_feasible": True},
         {"id": "central_island_negative", "start": [1.30, 2.00, 0.0], "expect_feasible": False},
     ]

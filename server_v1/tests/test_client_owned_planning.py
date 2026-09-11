@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import socket
 import subprocess
 import sys
@@ -19,6 +20,7 @@ if str(SERVER_DIR) not in sys.path:
 from local_parking_planner_v1 import plan_local_request
 from map_package_v1 import MAP_PACKAGE_FILES, load_and_verify_manifest
 from server_stub import Handler, ReusableTCPServer, ServerContext
+from slot_selector_v1 import desired_body_center_for_slot
 
 
 def slots() -> list[dict]:
@@ -31,6 +33,14 @@ def slots() -> list[dict]:
 
 
 class MapPackageAndLocalPlannerTests(unittest.TestCase):
+    def test_all_map_slots_have_parallel_body_goal_yaw(self) -> None:
+        ctx = ServerContext(SERVER_DIR, planning_enabled=True)
+        for slot in ctx.map_cfg["slots"]:
+            body = desired_body_center_for_slot(slot)
+            self.assertAlmostEqual(math.sin(body.yaw), 0.0, places=7)
+            expected_cos = 1.0 if slot["row"] == "bottom" else -1.0
+            self.assertAlmostEqual(math.cos(body.yaw), expected_cos, places=7)
+
     def test_checked_in_map_manifest_matches_operational_files(self) -> None:
         manifest = load_and_verify_manifest(SERVER_DIR)
         self.assertEqual(manifest["map_id"], "map_v1")
@@ -91,6 +101,8 @@ class MapPackageAndLocalPlannerTests(unittest.TestCase):
         self.assertEqual(result["trajectory"]["target_slot"], "P_B2")
         self.assertEqual(result["trajectory"]["validation"], "PASS")
         self.assertGreater(len(result["trajectory"]["points"]), 1)
+        final_yaw = result["trajectory"]["points"][-1]["yaw_rad"]
+        self.assertLessEqual(abs(final_yaw), math.radians(12.0))
 
     def test_protocol_output_emits_standard_trajectory_for_cpp_bridge(self) -> None:
         manifest = load_and_verify_manifest(SERVER_DIR)

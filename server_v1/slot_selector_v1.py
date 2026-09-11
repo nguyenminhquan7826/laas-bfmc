@@ -23,13 +23,31 @@ def desired_body_center_for_slot(slot: dict) -> Pose:
       1) vehicle geometric body center coincides with slot center;
       2) vehicle longitudinal axis is parallel to the two side boundaries.
 
-    Bottom row: nose points toward center road (+Y).
-    Top row:    nose points toward center road (-Y).
+    The goal yaw is map data, not an ID naming convention. For map_v1 all four
+    spaces are parallel to the road: bottom row points +X and top row points
+    -X. Keeping this explicit prevents a parallel slot from accidentally being
+    treated as a perpendicular one.
     The final motion primitive may be FORWARD or REVERSE.
     """
     cx, cy = map(float, slot["center_m"])
-    sid = str(slot["id"])
-    yaw = math.pi / 2.0 if sid.startswith("P_B") else -math.pi / 2.0
+    goal_pose = slot.get("goal_pose")
+    if not isinstance(goal_pose, dict):
+        raise ValueError(f"slot_goal_pose_missing:{slot.get('id')}")
+    if goal_pose.get("reference_point") != "body_center":
+        raise ValueError(f"slot_goal_reference_invalid:{slot.get('id')}")
+    if goal_pose.get("parking_type") != "PARALLEL":
+        raise ValueError(f"slot_parking_type_invalid:{slot.get('id')}")
+    try:
+        yaw = float(goal_pose["yaw_rad"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"slot_goal_yaw_invalid:{slot.get('id')}") from exc
+    if not math.isfinite(yaw):
+        raise ValueError(f"slot_goal_yaw_invalid:{slot.get('id')}")
+
+    # map_v1 parallel slots have their long polygon axis along X. Accept either
+    # travel direction (0 or pi), reject a perpendicular +/-pi/2 goal.
+    if abs(math.sin(yaw)) > 1e-6:
+        raise ValueError(f"slot_goal_not_parallel_to_road:{slot.get('id')}")
     return Pose(cx, cy, yaw)
 
 

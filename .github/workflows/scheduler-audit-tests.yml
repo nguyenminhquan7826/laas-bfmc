@@ -154,7 +154,8 @@ jobs:
           assert 'configure_ai_affinity()' in ai_launcher
           assert 'best_AI.cv2.setNumThreads(1)' in ai_launcher
           assert 'OMP_NUM_THREADS' in ai_launcher
-          assert 'options.intra_op_num_threads = 2' in ai_detector
+          assert 'cpu_threads: int = 2' in ai_detector
+          assert 'options.intra_op_num_threads = settings.cpu_threads' in ai_detector
           assert 'options.inter_op_num_threads = 1' in ai_detector
 
           print('[PASS] camera/control isolation + cached camera/IPM transforms + low-overhead bench debug policy + safety invariants')

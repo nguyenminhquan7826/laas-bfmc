@@ -6,6 +6,13 @@ export interface PoseMessage {
 
 export interface ParkingMessage {
   slots?: Array<{ id: string; state: string; confidence: number }>;
+  objects?: Array<{
+    class: string;
+    confidence: number;
+    relative_x_m: number;
+    relative_y_m: number;
+    associated_slot?: string;
+  }>;
 }
 
 export interface RuntimeMessage {

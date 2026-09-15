@@ -213,6 +213,7 @@ Executive::Executive(const Config& config)
       local_parking_planner_worker_(config_),
 #endif
       lane_perception_(config_),
+      parking_perception_(config_),
       parking_status_bench_source_(config_),
       vehicle_pose_estimator_(config_),
       mission_(config_),
@@ -265,6 +266,16 @@ bool Executive::init()
         std::cerr << "[EXEC] Vehicle UART init failed.\n";
         state_.store(RuntimeState::ERROR);
         return false;
+    }
+
+    if (config_.parking.enable_camera_parking_perception) {
+        if (!parking_perception_.ready()) {
+            std::cerr << "[PARKING][PERCEPTION] init failed: "
+                      << parking_perception_.reason() << "\n";
+            state_.store(RuntimeState::ERROR);
+            return false;
+        }
+        std::cout << "[PARKING][PERCEPTION] camera slot association READY\n";
     }
 
 #ifdef LAAS_ENABLE_PARKING_CLIENT
@@ -553,9 +564,19 @@ void Executive::yoloTick()
         }
     }
 
-    ObstacleMsg obstacle;
-    if (yolo_.receiveObstacle(obstacle)) {
-        blackboard_.setObstacle(obstacle);
+    YoloPerceptionMsg perception;
+    if (yolo_.receivePerception(perception)) {
+        blackboard_.setYoloPerception(perception);
+        blackboard_.setObstacle(perception.obstacle);
+
+        if (config_.parking.enable_camera_parking_perception) {
+            ParkingStatusMsg parking_status;
+            if (parking_perception_.process(
+                    perception, blackboard_.vehiclePose(), nowMs(),
+                    parking_status)) {
+                blackboard_.setParkingStatus(parking_status);
+            }
+        }
     }
 }
 
@@ -764,9 +785,11 @@ void Executive::parkingNetworkTick()
         }
     }
 
-    ParkingStatusMsg bench_status;
-    if (parking_status_bench_source_.process(nowMs(), bench_status)) {
-        blackboard_.setParkingStatus(bench_status);
+    if (!config_.parking.enable_camera_parking_perception) {
+        ParkingStatusMsg bench_status;
+        if (parking_status_bench_source_.process(nowMs(), bench_status)) {
+            blackboard_.setParkingStatus(bench_status);
+        }
     }
 
     const bool was_connected = parking_server_connected_;

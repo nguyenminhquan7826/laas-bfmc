@@ -51,6 +51,28 @@ struct ObstacleMsg {
     float confidence = 0.0F;
 };
 
+// Result returned by the Pi-local YOLO process. Bounding boxes are expressed
+// in pixels of the undistorted camera frame sent by CameraInterface.
+struct YoloDetection {
+    int class_id = -1;
+    std::string class_name;
+    float confidence = 0.0F;
+    float x1_px = 0.0F;
+    float y1_px = 0.0F;
+    float x2_px = 0.0F;
+    float y2_px = 0.0F;
+};
+
+struct YoloPerceptionMsg {
+    Header header;  // capture time matched to the transmitted frame ID
+    bool has_detection_payload = false;
+    std::uint32_t frame_id = 0;
+    int image_width = 0;
+    int image_height = 0;
+    ObstacleMsg obstacle;
+    std::vector<YoloDetection> detections;
+};
+
 struct BehaviorRequest {
     Header header;
     BehaviorMode mode = BehaviorMode::STOP;

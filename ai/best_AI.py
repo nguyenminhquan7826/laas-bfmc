@@ -3,7 +3,7 @@
 
 Data path:
   C++ camera -> 127.0.0.1:9996 -> this process
-  this process -> 127.0.0.1:8888 -> C++ ObstacleMsg distance payload
+  this process -> 127.0.0.1:8888 -> C++ PDET perception payload
   this process -> monitor PC:9998 -> annotated detection JPEG
 
 Model contract used by the parking model:
@@ -11,11 +11,9 @@ Model contract used by the parking model:
   class 1 = vehicle
   input   = 416x416
 
-The safety-critical distance path remains backward-compatible with the current
-C++ UdpYoloInterface: only the in-lane VEHICLE distance is sent on UDP 8888.
-Parking-sign detections and all vehicle boxes are retained/visualized here; the
-slot association (P_B1/P_B2/P_T1/P_T2 -> FREE/OCCUPIED) should be performed in
-the parking/map layer where slot geometry is known.
+PDET includes the legacy in-lane distance plus parking-sign/vehicle boxes. Slot
+association (P_B1/P_B2/P_T1/P_T2 -> FREE/OCCUPIED) remains in the C++ map layer,
+where live pose and versioned slot geometry are available.
 """
 
 from __future__ import annotations
@@ -52,6 +50,8 @@ class Settings:
     raw_frame_port: int = 9996
     distance_ip: str = "127.0.0.1"
     distance_port: int = 8888
+    result_format: str = "perception"
+    save_first_frame: Optional[Path] = None
 
     monitor_ip: str = "192.168.1.253"
     monitor_port: int = 9998
@@ -105,6 +105,17 @@ def parse_args() -> Settings:
         default=env_default("LAAS_DISTANCE_IP", "127.0.0.1"),
     )
     parser.add_argument("--distance-port", type=int, default=8888)
+    parser.add_argument(
+        "--result-format",
+        choices=("perception", "distance"),
+        default=env_default("LAAS_AI_RESULT_FORMAT", "perception"),
+        help="Use 'distance' only with a legacy C++ client",
+    )
+    parser.add_argument(
+        "--save-first-frame",
+        type=Path,
+        help="save the first undistorted C++ frame and exit (calibration)",
+    )
 
     parser.add_argument(
         "--monitor-ip",
@@ -179,6 +190,12 @@ def parse_args() -> Settings:
         raw_frame_port=args.raw_port,
         distance_ip=args.distance_ip,
         distance_port=args.distance_port,
+        result_format=args.result_format,
+        save_first_frame=(
+            args.save_first_frame.expanduser().resolve()
+            if args.save_first_frame is not None
+            else None
+        ),
         monitor_ip=args.monitor_ip.strip(),
         monitor_port=args.monitor_port,
         monitor_fps=args.monitor_fps,
@@ -255,14 +272,15 @@ class UdpJpegReassembler:
 
     def add_packet(
         self, packet: bytes, address: Tuple[str, int]
-    ) -> Optional[np.ndarray]:
+    ) -> Optional[Tuple[np.ndarray, int]]:
         now = time.monotonic()
         self._cleanup(now)
 
         if not packet.startswith(JPEG_MAGIC):
-            return cv2.imdecode(
+            frame = cv2.imdecode(
                 np.frombuffer(packet, dtype=np.uint8), cv2.IMREAD_COLOR
             )
+            return (frame, 0) if frame is not None else None
 
         if len(packet) < JPEG_HEADER.size:
             return None
@@ -313,9 +331,10 @@ class UdpJpegReassembler:
         if len(jpeg) != total_size:
             return None
 
-        return cv2.imdecode(
+        frame = cv2.imdecode(
             np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR
         )
+        return (frame, frame_id) if frame is not None else None
 
 
 class UdpJpegSender:
@@ -879,16 +898,17 @@ def make_receive_socket(settings: Settings) -> socket.socket:
 
 def recv_latest_frame(
     sock: socket.socket, reassembler: UdpJpegReassembler
-) -> Tuple[np.ndarray, Tuple[str, int]]:
+) -> Tuple[np.ndarray, Tuple[str, int], int]:
     latest_frame: Optional[np.ndarray] = None
     latest_address: Optional[Tuple[str, int]] = None
+    latest_frame_id = 0
 
     # Block until at least one complete frame is available.
     while True:
         packet, address = sock.recvfrom(65535)
-        frame = reassembler.add_packet(packet, address)
-        if frame is not None:
-            latest_frame = frame
+        assembled = reassembler.add_packet(packet, address)
+        if assembled is not None:
+            latest_frame, latest_frame_id = assembled
             latest_address = address
             break
 
@@ -906,15 +926,50 @@ def recv_latest_frame(
             except BlockingIOError:
                 break
 
-            frame = reassembler.add_packet(packet, address)
-            if frame is not None:
-                latest_frame = frame
+            assembled = reassembler.add_packet(packet, address)
+            if assembled is not None:
+                latest_frame, latest_frame_id = assembled
                 latest_address = address
     finally:
         sock.settimeout(previous_timeout)
 
     assert latest_frame is not None and latest_address is not None
-    return latest_frame, latest_address
+    return latest_frame, latest_address, latest_frame_id
+
+
+def encode_perception_result(
+    frame_id: int,
+    frame: np.ndarray,
+    distance: Optional[float],
+    detections: Sequence[dict],
+) -> bytes:
+    """Encode bounded, locale-independent PDET v1 CSV for the C++ process."""
+    height, width = frame.shape[:2]
+    selected = sorted(
+        detections, key=lambda detection: float(detection["score"]), reverse=True
+    )[:32]
+    fields = [
+        "PDET",
+        "1",
+        str(int(frame_id) & 0xFFFFFFFF),
+        str(int(width)),
+        str(int(height)),
+        f"{distance:.3f}" if distance is not None else "-1.000",
+        str(len(selected)),
+    ]
+    for detection in selected:
+        x1, y1, x2, y2 = detection["bbox"]
+        fields.extend(
+            (
+                str(int(detection["class_id"])),
+                f"{float(detection['score']):.6f}",
+                str(int(x1)),
+                str(int(y1)),
+                str(int(x2)),
+                str(int(y2)),
+            )
+        )
+    return ",".join(fields).encode("ascii")
 
 
 def perf_summary(values: Deque[float]) -> Tuple[float, float, float]:
@@ -1014,7 +1069,9 @@ def run(settings: Settings) -> int:
             recv_t0 = cycle_t0
 
             try:
-                frame, _sender = recv_latest_frame(receive_sock, reassembler)
+                frame, _sender, frame_id = recv_latest_frame(
+                    receive_sock, reassembler
+                )
             except socket.timeout:
                 now = time.monotonic()
                 if (
@@ -1031,6 +1088,14 @@ def run(settings: Settings) -> int:
             recv_t1 = time.perf_counter()
             recv_ms = (recv_t1 - recv_t0) * 1000.0
             last_complete_frame = time.monotonic()
+
+            if settings.save_first_frame is not None:
+                settings.save_first_frame.parent.mkdir(parents=True, exist_ok=True)
+                if not cv2.imwrite(str(settings.save_first_frame), frame):
+                    print(f"[AI] Cannot save frame: {settings.save_first_frame}")
+                    return 5
+                print(f"[AI] Saved undistorted frame: {settings.save_first_frame}")
+                return 0
 
             if stat_start is None:
                 stat_start = time.monotonic()
@@ -1077,10 +1142,17 @@ def run(settings: Settings) -> int:
                 )
             previous_processed = now
 
-            message = f"{distance:.3f}" if distance is not None else "-1.000"
+            distance_text = (
+                f"{distance:.3f}" if distance is not None else "-1.000"
+            )
+            message = (
+                encode_perception_result(frame_id, frame, distance, detections)
+                if settings.result_format == "perception"
+                else distance_text.encode("ascii")
+            )
             distance_t0 = time.perf_counter()
             try:
-                distance_sock.sendto(message.encode("ascii"), distance_destination)
+                distance_sock.sendto(message, distance_destination)
                 stat_tx += 1
             except OSError as exc:
                 print(f"[AI] Cannot send distance: {exc}")
@@ -1138,7 +1210,8 @@ def run(settings: Settings) -> int:
                     f"parkingSign={stat_sign_detections} "
                     f"signNow={'YES' if parking_sign_detected else 'NO'} "
                     f"signConf={parking_sign_confidence:.2f} "
-                    f"tx={stat_tx} last={message}"
+                    f"tx={stat_tx} distance={distance_text} "
+                    f"format={settings.result_format}"
                 )
 
                 recv_avg, recv_p50, recv_p95 = perf_summary(perf_recv)

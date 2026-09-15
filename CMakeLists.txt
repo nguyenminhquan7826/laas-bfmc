@@ -64,6 +64,7 @@ set(LAAS_CORE_SOURCES
     # =========================
     src/functional/perception/LaneDetectorCore.cpp
     src/functional/perception/LanePerceptionModule.cpp
+    src/functional/perception/ParkingPerceptionModule.cpp
     src/functional/perception/ParkingStatusBenchSource.cpp
 
     # =========================

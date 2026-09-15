@@ -114,12 +114,14 @@
       </article>
 
       <article class="panel slots-panel">
-        <div class="panel-head"><div><p class="eyebrow">Perception input</p><h2>Parking slots</h2></div></div>
+        <div class="panel-head"><div><p class="eyebrow">Perception input</p><h2>Parking slots</h2></div><span class="tag" [class.accent]="parkingSignConfidence() !== null">{{ parkingSignConfidence() === null ? 'NO PARKING SIGN' : 'PARKING ' + ((parkingSignConfidence()! * 100) | number:'1.0-0') + '%' }}</span></div>
         <div class="slots">
           <div *ngFor="let slot of map?.slots" class="slot" [class.free]="slotState(slot.id) === 'FREE'" [class.occupied]="slotState(slot.id) === 'OCCUPIED'">
             <strong>{{ slot.id }}</strong><span>{{ slotState(slot.id) }}</span><small>{{ slotConfidence(slot.id) === null ? '—' : ((slotConfidence(slot.id)! * 100) | number:'1.0-0') + '%' }}</small>
           </div>
         </div>
+        <div class="line perception-summary"><span>Vehicle detections</span><b>{{ detectedVehicleCount() }}</b></div>
+        <div class="line"><span>Associated slots</span><b>{{ associatedVehicleSlots() }}</b></div>
       </article>
     </section>
   </ng-container>

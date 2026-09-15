@@ -16,6 +16,8 @@ public:
     bool init();
     bool sendFrame(const FrameMsg& frame, int quality = 85);
     bool sendDebugFrame(const cv::Mat& frame, int quality = 75);
+    bool receivePerception(YoloPerceptionMsg& perception);
+    // Backward-compatible adapter used by older callers/tests.
     bool receiveObstacle(ObstacleMsg& obstacle);
     void close();
     bool isInitialized() const;

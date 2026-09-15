@@ -16,6 +16,7 @@
 
 #include "../decision/MissionSupervisor.hpp"
 #include "../functional/perception/LanePerceptionModule.hpp"
+#include "../functional/perception/ParkingPerceptionModule.hpp"
 #include "../functional/perception/ParkingStatusBenchSource.hpp"
 #include "../functional/localization/VehiclePoseEstimator.hpp"
 #include "../functional/planning/LaneChangePlannerModule.hpp"
@@ -132,6 +133,7 @@ private:
 #endif
 
     LanePerceptionModule lane_perception_;
+    ParkingPerceptionModule parking_perception_;
     ParkingStatusBenchSource parking_status_bench_source_;
     VehiclePoseEstimator vehicle_pose_estimator_;
     MissionSupervisor mission_;

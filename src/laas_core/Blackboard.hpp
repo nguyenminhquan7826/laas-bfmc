@@ -22,6 +22,11 @@ public:
         obstacle_ = msg;
     }
 
+    void setYoloPerception(const YoloPerceptionMsg& msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        yolo_perception_ = msg;
+    }
+
     void setBehavior(const BehaviorRequest& msg) {
         std::lock_guard<std::mutex> lock(mutex_);
         behavior_ = msg;
@@ -77,6 +82,11 @@ public:
         return obstacle_;
     }
 
+    YoloPerceptionMsg yoloPerception() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return yolo_perception_;
+    }
+
     BehaviorRequest behavior() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return behavior_;
@@ -123,6 +133,7 @@ private:
     FrameMsg frame_;
     LanePerceptionMsg lane_;
     ObstacleMsg obstacle_;
+    YoloPerceptionMsg yolo_perception_;
     BehaviorRequest behavior_;
     TrajectoryMsg trajectory_;
     ControlCmdMsg raw_cmd_;

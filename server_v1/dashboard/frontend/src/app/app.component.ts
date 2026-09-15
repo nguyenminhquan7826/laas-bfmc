@@ -94,6 +94,26 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.vehicle?.parking?.slots?.find(slot => slot.id === slotId)?.confidence ?? null;
   }
 
+  parkingSignConfidence(): number | null {
+    const signs = this.vehicle?.parking?.objects
+      ?.filter(object => object.class === 'parking_sign') ?? [];
+    return signs.length
+      ? Math.max(...signs.map(object => object.confidence))
+      : null;
+  }
+
+  detectedVehicleCount(): number {
+    return this.vehicle?.parking?.objects
+      ?.filter(object => object.class === 'vehicle').length ?? 0;
+  }
+
+  associatedVehicleSlots(): string {
+    const slots = this.vehicle?.parking?.objects
+      ?.filter(object => object.class === 'vehicle' && object.associated_slot)
+      .map(object => object.associated_slot!) ?? [];
+    return [...new Set(slots)].join(', ') || '—';
+  }
+
   trajectoryValue(key: string): unknown {
     return this.vehicle?.trajectory?.[key] ?? null;
   }

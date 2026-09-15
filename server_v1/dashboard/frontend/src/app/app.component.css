@@ -52,6 +52,7 @@ select { min-width: 120px; border-radius: 8px; }
 .slot.free span { color: #4ee0a1; }
 .slot.occupied { border-color: #9b4848; background: rgba(128, 48, 48, .16); }
 .slot.occupied span { color: #ff7373; }
+.perception-summary { margin-top: 8px; }
 .empty-state { min-height: 55vh; display: grid; place-content: center; text-align: center; gap: 10px; color: #8799aa; }
 .empty-state h2 { color: #dfe9f2; font-size: 1.25rem; }
 .pulse { width: 20px; height: 20px; margin: auto; border-radius: 50%; background: #4aaedc; box-shadow: 0 0 0 12px rgba(74,174,220,.1); animation: pulse 1.5s infinite; }

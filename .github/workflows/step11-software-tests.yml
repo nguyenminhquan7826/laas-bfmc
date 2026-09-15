@@ -198,6 +198,23 @@ jobs:
       - name: Run IMU/map yaw convention test
         run: /tmp/test_vehicle_pose_estimator_yaw_convention
 
+      - name: Install parking perception test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopencv-dev
+
+      - name: Build real parking perception test
+        run: |
+          g++ -std=c++14 -Wall -Wextra -Wpedantic \
+            -Isrc \
+            server_v1/tests/test_parking_perception.cpp \
+            src/functional/perception/ParkingPerceptionModule.cpp \
+            $(pkg-config --cflags --libs opencv4) \
+            -o /tmp/test_parking_perception
+
+      - name: Run real parking perception test
+        run: /tmp/test_parking_perception
+
   full-app-build:
     runs-on: ubuntu-latest
 

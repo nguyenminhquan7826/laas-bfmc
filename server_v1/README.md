@@ -255,3 +255,81 @@ The Pi remains authoritative for immediate STOP/HOLD. In server-owned mode the
 Server coordinates planning/replanning. In client-owned mode it supplies only
 high-level navigation decisions and monitoring; it is never the realtime
 emergency-stop layer.
+## Step 4 — Parking sign and real slot perception
+
+The supplied YOLO11n INT8 model is stored at `ai/best_int8.onnx`. Its deployed
+contract is `416x416`, class `0=parking_sign`, class `1=vehicle`. The AI process
+now returns a bounded `PDET` packet containing the legacy front-obstacle
+distance and every retained parking/vehicle bounding box. C++ performs slot
+association because that process owns the live map pose and the versioned slot
+polygons from `map_v1.yaml`.
+
+Occupancy is fail-closed:
+
+- the parking sign must be confirmed in 3 frames;
+- a vehicle box is associated using its bottom-centre ground contact point;
+- the calibrated image-to-ground homography produces vehicle-relative
+  `(forward,left)` coordinates, then the encoder+IMU pose converts them to the
+  map frame;
+- `OCCUPIED` requires 3 observations;
+- `FREE` requires 5 observations while the slot polygon is sufficiently visible;
+- missing calibration, stale pose/result, an invisible slot, or an inactive
+  parking-sign gate produces `UNKNOWN`, never `FREE`.
+
+Install and start the isolated AI process on the Raspberry Pi:
+
+```bash
+cd ~/Documents/laas_v0.6.0-p0-batch
+python3 -m venv --system-site-packages ai/.venv
+ai/.venv/bin/pip install -r ai/requirements.txt
+ai/.venv/bin/python ai/run_ai_affinity.py -- \
+  ai/.venv/bin/python ai/best_AI.py \
+  --model ai/best_int8.onnx \
+  --monitor-ip 192.168.1.105
+```
+
+Before slot association, measure at least four non-collinear points on the flat
+road in the **undistorted 640x480 image**. Express each ground coordinate from
+the rear-axle-centre frame as `forward_m,left_m` (`+left` is vehicle left), then
+capture that exact image path from the C++ camera stream:
+
+```bash
+# Terminal 1: enable C++ -> local AI frames while UART TX remains OFF
+LAAS_PARKING_POSE_BENCH=1 \
+LAAS_PARKING_BENCH_YOLO=1 \
+./build/laas_pp pp
+
+# Terminal 2: save one already-undistorted frame and exit
+ai/.venv/bin/python ai/best_AI.py \
+  --model ai/best_int8.onnx \
+  --save-first-frame parking_calibration.jpg \
+  --monitor-ip ''
+```
+
+Then solve the homography:
+
+```bash
+ai/.venv/bin/python ai/calibrate_parking_homography.py \
+  --image parking_calibration.jpg \
+  --point u1,v1,forward1,left1 \
+  --point u2,v2,forward2,left2 \
+  --point u3,v3,forward3,left3 \
+  --point u4,v4,forward4,left4
+```
+
+Use 6–10 points spread over the whole parking view when possible. Do not use
+points on vehicles, signs, walls, or a non-flat surface. The script prints
+`LAAS_PARKING_IMAGE_TO_GROUND_H`; copy that exact value into the launch command:
+
+```bash
+LAAS_PARKING_POSE_BENCH=1 \
+LAAS_PARKING_PERCEPTION=1 \
+LAAS_PARKING_IMAGE_TO_GROUND_H='h00,h01,h02,h10,h11,h12,h20,h21,h22' \
+LAAS_PARKING_SERVER_HOST=192.168.1.105 \
+./build/laas_pp pp
+```
+
+This profile uses real UART RX, real encoder+IMU pose and real camera parking
+status. UART TX remains disabled. Keep the vehicle stationary for the first
+camera/slot validation and compare the dashboard assignment with the physical
+bay before enabling any parking actuation.

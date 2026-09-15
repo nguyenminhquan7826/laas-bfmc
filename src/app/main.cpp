@@ -1,10 +1,38 @@
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "../laas_core/Config.hpp"
 #include "../laas_core/CpuAffinity.hpp"
 #include "../execution_control/Executive.hpp"
+
+namespace {
+
+bool parseHomography(const std::string& text, std::array<double, 9>& output)
+{
+    std::stringstream stream(text);
+    std::string token;
+    std::size_t index = 0U;
+    try {
+        while (std::getline(stream, token, ',')) {
+            if (index >= output.size()) {
+                return false;
+            }
+            std::size_t consumed = 0U;
+            output[index] = std::stod(token, &consumed);
+            if (consumed != token.size()) {
+                return false;
+            }
+            ++index;
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+    return index == output.size();
+}
+
+}  // namespace
 
 int main(int argc, char* argv[])
 {
@@ -174,8 +202,15 @@ int main(int argc, char* argv[])
         // completely disabled above.
         config.runtime.enable_uart_tx_neutral_only = true;
 
-        // Pose bench does not require YOLO or bird-eye debug traffic.
-        config.runtime.enable_yolo_udp = false;
+        // Pose bench normally does not require YOLO. Explicitly allow the
+        // local C++ -> AI frame path for model/homography calibration; this
+        // does not change the UART TX hard gate above.
+        const char* pose_bench_yolo_env =
+            std::getenv("LAAS_PARKING_BENCH_YOLO");
+        const bool pose_bench_yolo_enabled =
+            pose_bench_yolo_env &&
+            std::string(pose_bench_yolo_env) == "1";
+        config.runtime.enable_yolo_udp = pose_bench_yolo_enabled;
         config.udp.enable_debug_stream = false;
 
         config.parking.enable = true;
@@ -231,6 +266,7 @@ int main(int argc, char* argv[])
             << "[APP][PARKING_POSE_BENCH]"
             << " UART_RX=ON"
             << " UART_TX=OFF"
+            << " YOLO=" << (pose_bench_yolo_enabled ? "ON" : "OFF")
             << " POSE=ENCODER_IMU"
             << " TRACKER=BENCH_ONLY"
             << " server="
@@ -245,6 +281,50 @@ int main(int argc, char* argv[])
             << config.parking.initial_yaw_rad
             << ")"
             << " FREE=P_B2"
+            << "\n";
+    }
+
+    // Real parking perception is an explicit opt-in on top of a parking
+    // profile. It replaces the four synthetic slot states while preserving the
+    // existing RX-only UART safety boundary.
+    const char* perception_env = std::getenv("LAAS_PARKING_PERCEPTION");
+    const bool parking_perception_enabled =
+        perception_env && std::string(perception_env) == "1";
+    if (parking_perception_enabled) {
+        if (!config.parking.enable) {
+            std::cerr << "[APP] LAAS_PARKING_PERCEPTION requires "
+                      << "LAAS_PARKING_POSE_BENCH=1.\n";
+            return 4;
+        }
+
+        const char* homography_env =
+            std::getenv("LAAS_PARKING_IMAGE_TO_GROUND_H");
+        if (!homography_env ||
+            !parseHomography(homography_env,
+                             config.parking.image_to_ground_homography)) {
+            std::cerr
+                << "[APP] LAAS_PARKING_IMAGE_TO_GROUND_H must contain "
+                << "9 comma-separated coefficients.\n";
+            return 5;
+        }
+
+        const char* map_file_env =
+            std::getenv("LAAS_PARKING_MAP_FILE");
+        if (map_file_env && *map_file_env) {
+            config.parking.slot_map_file = map_file_env;
+        }
+
+        config.runtime.enable_yolo_udp = true;
+        config.parking.enable_bench_parking_status = false;
+        config.parking.enable_camera_parking_perception = true;
+        config.parking.image_to_ground_homography_valid = true;
+
+        std::cout
+            << "[APP][PARKING_PERCEPTION] YOLO=ON STATUS=CAMERA_MAP "
+            << "fakeSlots=OFF map="
+            << config.parking.slot_map_file
+            << " UART_TX="
+            << (config.runtime.enable_uart_tx ? "ON" : "OFF")
             << "\n";
     }
 

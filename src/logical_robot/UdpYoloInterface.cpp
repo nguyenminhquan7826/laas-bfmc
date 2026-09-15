@@ -6,10 +6,12 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -158,6 +160,35 @@ bool hasOnlyTrailingWhitespace(const std::string& text, std::size_t position)
     return text.find_first_not_of(" \t\r\n", position) == std::string::npos;
 }
 
+std::vector<std::string> splitCsv(const std::string& payload)
+{
+    std::vector<std::string> fields;
+    std::size_t start = 0U;
+    while (start <= payload.size()) {
+        const std::size_t comma = payload.find(',', start);
+        fields.push_back(payload.substr(
+            start,
+            comma == std::string::npos ? std::string::npos : comma - start));
+        if (comma == std::string::npos) {
+            break;
+        }
+        start = comma + 1U;
+    }
+    return fields;
+}
+
+template <typename Parse>
+bool parseWholeField(const std::string& text, Parse parse)
+{
+    try {
+        std::size_t consumed = 0U;
+        parse(consumed);
+        return consumed == text.size();
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
 }  // namespace
 
 struct UdpYoloInterface::Impl {
@@ -174,6 +205,7 @@ struct UdpYoloInterface::Impl {
     sockaddr_in debug_address{};
     std::uint32_t yolo_frame_id = 0;
     std::uint32_t debug_frame_id = 0;
+    std::deque<std::pair<std::uint32_t, std::uint64_t>> sent_frames;
     std::uint64_t last_debug_send_ms = 0;
     bool initialized = false;
 };
@@ -249,12 +281,20 @@ bool UdpYoloInterface::sendFrame(const FrameMsg& frame, int quality)
         !frame.header.valid) {
         return false;
     }
-    return sendJpegToSocket(
+    const bool sent = sendJpegToSocket(
         impl_->yolo_send_sock,
         impl_->yolo_address,
         frame.frame_bgr,
         quality,
         impl_->yolo_frame_id);
+    if (sent) {
+        impl_->sent_frames.emplace_back(
+            impl_->yolo_frame_id, frame.header.timestamp_ms);
+        while (impl_->sent_frames.size() > 64U) {
+            impl_->sent_frames.pop_front();
+        }
+    }
+    return sent;
 }
 
 bool UdpYoloInterface::sendDebugFrame(const cv::Mat& frame, int quality)
@@ -286,9 +326,9 @@ bool UdpYoloInterface::sendDebugFrame(const cv::Mat& frame, int quality)
     return sent;
 }
 
-bool UdpYoloInterface::receiveObstacle(ObstacleMsg& obstacle)
+bool UdpYoloInterface::receivePerception(YoloPerceptionMsg& perception)
 {
-    obstacle = ObstacleMsg{};
+    perception = YoloPerceptionMsg{};
 
     if (!impl_->config.runtime.enable_yolo_udp ||
         !impl_->initialized ||
@@ -296,7 +336,7 @@ bool UdpYoloInterface::receiveObstacle(ObstacleMsg& obstacle)
         return false;
     }
 
-    char buffer[128] = {0};
+    char buffer[8192] = {0};
     sockaddr_in sender_address{};
     socklen_t sender_length = sizeof(sender_address);
     const int received = recvfrom(
@@ -313,22 +353,148 @@ bool UdpYoloInterface::receiveObstacle(ObstacleMsg& obstacle)
 
     try {
         const std::string payload(buffer);
+        if (payload.compare(0U, 5U, "PDET,") == 0) {
+            const std::vector<std::string> fields = splitCsv(payload);
+            constexpr std::size_t kHeaderFields = 7U;
+            constexpr std::size_t kDetectionFields = 6U;
+            constexpr std::size_t kMaxDetections = 32U;
+            if (fields.size() < kHeaderFields || fields[1] != "1") {
+                throw std::invalid_argument("invalid PDET header");
+            }
+
+            unsigned long parsed_frame_id = 0UL;
+            int width = 0;
+            int height = 0;
+            float distance = -1.0F;
+            unsigned long count = 0UL;
+            if (!parseWholeField(fields[2], [&](std::size_t& n) {
+                    parsed_frame_id = std::stoul(fields[2], &n);
+                }) ||
+                !parseWholeField(fields[3], [&](std::size_t& n) {
+                    width = std::stoi(fields[3], &n);
+                }) ||
+                !parseWholeField(fields[4], [&](std::size_t& n) {
+                    height = std::stoi(fields[4], &n);
+                }) ||
+                !parseWholeField(fields[5], [&](std::size_t& n) {
+                    distance = std::stof(fields[5], &n);
+                }) ||
+                !parseWholeField(fields[6], [&](std::size_t& n) {
+                    count = std::stoul(fields[6], &n);
+                }) ||
+                parsed_frame_id > std::numeric_limits<std::uint32_t>::max() ||
+                width <= 0 || height <= 0 ||
+                !std::isfinite(distance) || count > kMaxDetections ||
+                fields.size() != kHeaderFields + count * kDetectionFields) {
+                throw std::invalid_argument("invalid PDET values");
+            }
+
+            perception.frame_id = static_cast<std::uint32_t>(parsed_frame_id);
+            perception.image_width = width;
+            perception.image_height = height;
+            perception.has_detection_payload = true;
+            perception.detections.reserve(static_cast<std::size_t>(count));
+
+            for (std::size_t i = 0U; i < count; ++i) {
+                const std::size_t base = kHeaderFields + i * kDetectionFields;
+                YoloDetection detection;
+                if (!parseWholeField(fields[base], [&](std::size_t& n) {
+                        detection.class_id = std::stoi(fields[base], &n);
+                    }) ||
+                    !parseWholeField(fields[base + 1U], [&](std::size_t& n) {
+                        detection.confidence = std::stof(fields[base + 1U], &n);
+                    }) ||
+                    !parseWholeField(fields[base + 2U], [&](std::size_t& n) {
+                        detection.x1_px = std::stof(fields[base + 2U], &n);
+                    }) ||
+                    !parseWholeField(fields[base + 3U], [&](std::size_t& n) {
+                        detection.y1_px = std::stof(fields[base + 3U], &n);
+                    }) ||
+                    !parseWholeField(fields[base + 4U], [&](std::size_t& n) {
+                        detection.x2_px = std::stof(fields[base + 4U], &n);
+                    }) ||
+                    !parseWholeField(fields[base + 5U], [&](std::size_t& n) {
+                        detection.y2_px = std::stof(fields[base + 5U], &n);
+                    }) ||
+                    !std::isfinite(detection.confidence) ||
+                    !std::isfinite(detection.x1_px) ||
+                    !std::isfinite(detection.y1_px) ||
+                    !std::isfinite(detection.x2_px) ||
+                    !std::isfinite(detection.y2_px) ||
+                    detection.confidence < 0.0F ||
+                    detection.confidence > 1.0F ||
+                    detection.x1_px < 0.0F || detection.y1_px < 0.0F ||
+                    detection.x2_px <= detection.x1_px ||
+                    detection.y2_px <= detection.y1_px ||
+                    detection.x2_px > static_cast<float>(width) ||
+                    detection.y2_px > static_cast<float>(height)) {
+                    throw std::invalid_argument("invalid PDET detection");
+                }
+                detection.class_name = detection.class_id == 0
+                    ? "parking_sign"
+                    : detection.class_id == 1 ? "vehicle" : "unknown";
+                perception.detections.push_back(detection);
+            }
+
+            const std::uint64_t received_ms = nowMs();
+            std::uint64_t capture_ms = received_ms;
+            for (const auto& sent : impl_->sent_frames) {
+                if (sent.first == perception.frame_id) {
+                    capture_ms = sent.second;
+                    break;
+                }
+            }
+            while (!impl_->sent_frames.empty() &&
+                   impl_->sent_frames.front().first != perception.frame_id) {
+                impl_->sent_frames.pop_front();
+            }
+            if (!impl_->sent_frames.empty()) {
+                impl_->sent_frames.pop_front();
+            }
+
+            perception.header.timestamp_ms = capture_ms;
+            perception.header.valid = true;
+            perception.obstacle.header.timestamp_ms = received_ms;
+            perception.obstacle.header.valid = true;
+            perception.obstacle.distance_m = distance;
+            perception.obstacle.has_obstacle = distance > 0.05F;
+            perception.obstacle.confidence =
+                perception.obstacle.has_obstacle ? 1.0F : 0.0F;
+            return true;
+        }
+
         std::size_t parsed = 0;
         const float distance = std::stof(payload, &parsed);
         if (!hasOnlyTrailingWhitespace(payload, parsed) || !std::isfinite(distance)) {
             throw std::invalid_argument("invalid distance payload");
         }
 
-        obstacle.header.timestamp_ms = nowMs();
-        obstacle.header.valid = true;
-        obstacle.distance_m = distance;
-        obstacle.has_obstacle = distance > 0.05F;
-        obstacle.confidence = obstacle.has_obstacle ? 1.0F : 0.0F;
+        perception.header.timestamp_ms = nowMs();
+        perception.header.valid = true;
+        perception.frame_id = 0U;
+        perception.image_width = impl_->config.camera.width;
+        perception.image_height = impl_->config.camera.height;
+        perception.obstacle.header = perception.header;
+        perception.obstacle.distance_m = distance;
+        perception.obstacle.has_obstacle = distance > 0.05F;
+        perception.obstacle.confidence =
+            perception.obstacle.has_obstacle ? 1.0F : 0.0F;
         return true;
     } catch (const std::exception&) {
-        std::cerr << "[UDP-YOLO] Failed to parse distance: '" << buffer << "'\n";
+        std::cerr << "[UDP-YOLO] Failed to parse result packet\n";
         return false;
     }
+}
+
+bool UdpYoloInterface::receiveObstacle(ObstacleMsg& obstacle)
+{
+    YoloPerceptionMsg perception;
+    if (!receivePerception(perception)) {
+        obstacle = ObstacleMsg{};
+        return false;
+    }
+    obstacle = perception.obstacle;
+    return true;
 }
 
 void UdpYoloInterface::close()
@@ -351,6 +517,7 @@ void UdpYoloInterface::close()
     impl_->debug_send_sock = -1;
     impl_->distance_recv_sock = -1;
     impl_->initialized = false;
+    impl_->sent_frames.clear();
 }
 
 bool UdpYoloInterface::isInitialized() const

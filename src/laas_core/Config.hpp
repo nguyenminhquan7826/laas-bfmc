@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include "Messages.hpp"
 #include "SteeringCalibration.hpp"
@@ -128,6 +129,30 @@ struct ParkingConfig {
     ParkingSlotState bench_p_b2 = ParkingSlotState::UNKNOWN;
     ParkingSlotState bench_p_t1 = ParkingSlotState::UNKNOWN;
     ParkingSlotState bench_p_t2 = ParkingSlotState::UNKNOWN;
+
+    // Real camera parking perception. The Pi-local YOLO process returns all
+    // parking_sign/vehicle boxes. A calibrated homography maps an image pixel
+    // [u,v,1] to vehicle-ground [forward_m,left_m,scale]. Slot association is
+    // then performed in the map frame using the live encoder+IMU pose.
+    bool enable_camera_parking_perception = false;
+    std::string slot_map_file = "server_v1/map_v1.yaml";
+    bool image_to_ground_homography_valid = false;
+    std::array<double, 9> image_to_ground_homography{{
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0,
+    }};
+    float parking_sign_min_confidence = 0.50F;
+    float vehicle_min_confidence = 0.45F;
+    int parking_sign_confirm_frames = 3;
+    int parking_sign_hold_ms = 15000;
+    int occupied_confirm_frames = 3;
+    int free_confirm_frames = 5;
+    int slot_state_timeout_ms = 5000;
+    int parking_perception_timeout_ms = 1000;
+    int max_pose_frame_skew_ms = 500;
+    double min_visible_slot_fraction = 0.50;
+    double min_projected_slot_area_px2 = 250.0;
 
     // Bench-only map-frame parking tracker. Its output is logged only and must
     // not be routed to UART until the dedicated parking safety layer and real

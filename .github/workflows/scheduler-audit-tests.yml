@@ -128,8 +128,8 @@ jobs:
           assert 'laas_pp -> affinity OFF' in main
           assert 'LAAS_PARKING_BENCH_YOLO' in main
 
-          bench_profile_start = main.index('if (bench_env && std::string(bench_env) == "1")')
-          bench_profile_end = main.index('laas::Executive executive(config);', bench_profile_start)
+          bench_profile_start = main.index('if (parking_bench_enabled)')
+          bench_profile_end = main.index('if (parking_pose_bench_enabled)', bench_profile_start)
           bench_profile = main[bench_profile_start:bench_profile_end]
           assert 'config.runtime.enable_uart = false;' in bench_profile
           assert 'config.runtime.enable_uart = true;' not in bench_profile

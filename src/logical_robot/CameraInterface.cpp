@@ -128,13 +128,16 @@ bool CameraInterface::prepareUndistortMaps()
         -0.0002707688044880526, 0.0006724194580262318,
         -0.01935517123682299);
 
+    undistort_valid_roi_ = cv::Rect{};
+
     const cv::Mat new_camera_matrix = cv::getOptimalNewCameraMatrix(
         camera_matrix,
         distortion,
         image_size,
         0.0,
         image_size,
-        &undistort_valid_roi_);
+        &undistort_valid_roi_,
+        true);
 
     cv::initUndistortRectifyMap(
         camera_matrix,
@@ -190,40 +193,37 @@ cv::Mat CameraInterface::undistortAndResize(const cv::Mat& input) const
         return cv::Mat{};
     }
 
-    const cv::Size target_size(config_.camera.width, config_.camera.height);
+    const cv::Size target_size(
+        config_.camera.width,
+        config_.camera.height);
 
     cv::Mat source;
+
     if (input.size() == target_size) {
         source = input;
     } else {
-        cv::resize(input, source, target_size);
+        cv::resize(
+            input,
+            source,
+            target_size,
+            0.0,
+            0.0,
+            cv::INTER_LINEAR);
     }
 
     cv::Mat undistorted;
+
     cv::remap(
         source,
         undistorted,
         undistort_map1_,
         undistort_map2_,
         cv::INTER_LINEAR,
-        cv::BORDER_CONSTANT);
+        cv::BORDER_CONSTANT,
+        cv::Scalar(0, 0, 0));
 
-    cv::Mat cropped;
-    const cv::Rect frame_rect(0, 0, undistorted.cols, undistorted.rows);
-    const cv::Rect roi = undistort_valid_roi_ & frame_rect;
-    if (roi.width > 0 && roi.height > 0) {
-        cropped = undistorted(roi);
-    } else {
-        cropped = undistorted;
-    }
-
-    if (cropped.size() == target_size) {
-        return cropped.clone();
-    }
-
-    cv::Mat resized;
-    cv::resize(cropped, resized, target_size);
-    return resized;
+    // Không crop ROI và không resize lần thứ hai.
+    return undistorted;
 }
 
 bool CameraInterface::isOpened() const

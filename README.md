@@ -36,3 +36,55 @@ variable `LAAS_MODEL_PATH` when necessary.
 runtime still uses `src/laas_core/Config.hpp`; a YAML loader is not implemented.
 
 P1a host/MCU watchdog changes are intentionally not included in this version.
+
+
+
+////// server
+
+// cập nhật git
+cd "D:\GitHub\RaspberryPi5\laas-bfmc"
+
+git switch step12-status-sync
+git pull --ff-only origin step12-status-sync
+git log -1 --oneline
+
+// build lại dashboard
+
+cd .\server_v1\dashboard\frontend
+npm.cmd run build
+
+// run server
+
+cd ..\..\
+
+py .\server_stub.py `
+  --host 0.0.0.0 `
+  --port 5000 `
+  --monitor-host 0.0.0.0 `
+  --monitor-port 5006 `
+  --planning-owner client
+
+// mở dashboard
+
+Start-Process "http://127.0.0.1:5006/"
+
+
+
+///run model AI
+
+cd ~/Documents/laas_v0.6.0-p0-batch
+
+.venv-ai/bin/python ai/best_AI.py \
+  --model ai/best_int8.onnx \
+  --monitor-ip 192.168.1.105 \
+  --monitor-port 9998 \
+  --cpu-affinity 2,3 \
+  --cpu-threads 2
+
+/// run process chính
+LAAS_PARKING_POSE_BENCH=1 \
+LAAS_PARKING_BENCH_YOLO=1 \
+LAAS_PARKING_BENCH_DEBUG=1 \
+LAAS_PARKING_SERVER_HOST=192.168.1.105 \
+LAAS_MONITOR_IP=192.168.1.105 \
+./build/laas_pp pp

@@ -19,9 +19,15 @@ export class AppComponent implements OnInit, OnDestroy {
   streamOnline = false;
   lastUpdated: Date | null = null;
   readonly mapImageUrl: string;
+  detectionsFrameUrl: string | null = null;
+  birdEyeFrameUrl: string | null = null;
+  detectionsFrameLive = false;
+  birdEyeFrameLive = false;
 
   private eventSource: EventSource | null = null;
   private pollSubscription: Subscription | null = null;
+  private frameSubscription: Subscription | null = null;
+  private frameRequests = { detections: false, 'bird-eye': false };
 
   constructor(private readonly api: MonitoringApiService) {
     this.mapImageUrl = api.mapImageUrl();
@@ -43,11 +49,16 @@ export class AppComponent implements OnInit, OnDestroy {
     this.pollSubscription = interval(2000).subscribe(() => {
       if (!this.streamOnline) this.refresh();
     });
+    this.refreshDebugFrames();
+    this.frameSubscription = interval(250).subscribe(() => this.refreshDebugFrames());
   }
 
   ngOnDestroy(): void {
     this.eventSource?.close();
     this.pollSubscription?.unsubscribe();
+    this.frameSubscription?.unsubscribe();
+    this.revokeFrameUrl('detections');
+    this.revokeFrameUrl('bird-eye');
   }
 
   get vehicle(): VehicleStatus | null {
@@ -65,6 +76,44 @@ export class AppComponent implements OnInit, OnDestroy {
       next: response => this.applyVehicles(response),
       error: () => this.backendOnline = false,
     });
+  }
+
+  private refreshDebugFrames(): void {
+    this.refreshDebugFrame('detections');
+    this.refreshDebugFrame('bird-eye');
+  }
+
+  private refreshDebugFrame(kind: 'bird-eye' | 'detections'): void {
+    if (this.frameRequests[kind]) return;
+    this.frameRequests[kind] = true;
+    this.api.debugFrame(kind).subscribe({
+      next: blob => {
+        this.frameRequests[kind] = false;
+        const nextUrl = URL.createObjectURL(blob);
+        this.revokeFrameUrl(kind);
+        if (kind === 'detections') {
+          this.detectionsFrameUrl = nextUrl;
+          this.detectionsFrameLive = true;
+        } else {
+          this.birdEyeFrameUrl = nextUrl;
+          this.birdEyeFrameLive = true;
+        }
+      },
+      error: () => {
+        this.frameRequests[kind] = false;
+        if (kind === 'detections') this.detectionsFrameLive = false;
+        else this.birdEyeFrameLive = false;
+      },
+    });
+  }
+
+  private revokeFrameUrl(kind: 'bird-eye' | 'detections'): void {
+    const value = kind === 'detections'
+      ? this.detectionsFrameUrl
+      : this.birdEyeFrameUrl;
+    if (value) URL.revokeObjectURL(value);
+    if (kind === 'detections') this.detectionsFrameUrl = null;
+    else this.birdEyeFrameUrl = null;
   }
 
   poseMarkerStyle(): Record<string, string> {

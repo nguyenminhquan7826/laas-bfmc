@@ -47,6 +47,14 @@ int main(int argc, char* argv[])
 
     laas::Config config;
 
+    // Both Pi debug image streams use the same monitoring host. Keeping this
+    // runtime-configurable avoids rebuilding whenever the Windows server gets
+    // another DHCP address.
+    const char* monitor_ip_env = std::getenv("LAAS_MONITOR_IP");
+    if (monitor_ip_env && *monitor_ip_env) {
+        config.udp.monitor_ip = monitor_ip_env;
+    }
+
     if (argc > 1) {
         std::string mode = argv[1];
         if (mode == "pp" || mode == "pure_pursuit") {
@@ -211,7 +219,12 @@ int main(int argc, char* argv[])
             pose_bench_yolo_env &&
             std::string(pose_bench_yolo_env) == "1";
         config.runtime.enable_yolo_udp = pose_bench_yolo_enabled;
-        config.udp.enable_debug_stream = false;
+        const char* pose_bench_debug_env =
+            std::getenv("LAAS_PARKING_BENCH_DEBUG");
+        const bool pose_bench_debug_enabled =
+            pose_bench_yolo_enabled && pose_bench_debug_env &&
+            std::string(pose_bench_debug_env) == "1";
+        config.udp.enable_debug_stream = pose_bench_debug_enabled;
 
         config.parking.enable = true;
 
@@ -267,6 +280,8 @@ int main(int argc, char* argv[])
             << " UART_RX=ON"
             << " UART_TX=OFF"
             << " YOLO=" << (pose_bench_yolo_enabled ? "ON" : "OFF")
+            << " DEBUG=" << (pose_bench_debug_enabled ? "ON" : "OFF")
+            << " monitor=" << config.udp.monitor_ip
             << " POSE=ENCODER_IMU"
             << " TRACKER=BENCH_ONLY"
             << " server="

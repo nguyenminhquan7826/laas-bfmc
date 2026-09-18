@@ -23,7 +23,12 @@ from typing import Any, Dict, Optional
 from hybrid_astar_v1 import HybridAStarPlanner, Node, Pose, build_slot_obstacles, load_yaml
 from slot_selector_v1 import SlotPlan, choose_best_free_slot
 from parking_session_v1 import ParkingSession
-from monitoring_v1 import MonitoringHTTPServer, VehicleStateStore
+from monitoring_v1 import (
+    DebugFrameStore,
+    MonitoringHTTPServer,
+    UdpJpegReceiver,
+    VehicleStateStore,
+)
 from map_package_v1 import load_and_verify_manifest
 
 PROTOCOL_VERSION = 1
@@ -1108,6 +1113,15 @@ def main() -> None:
     parser.add_argument("--monitor-port", type=int, default=5005)
     parser.add_argument("--vehicle-offline-after-ms", type=int, default=3000)
     parser.add_argument("--no-monitoring", action="store_true", help="disable the read-only HTTP monitoring API")
+    parser.add_argument("--debug-frame-host", default="0.0.0.0")
+    parser.add_argument("--bird-eye-port", type=int, default=9997)
+    parser.add_argument("--detections-port", type=int, default=9998)
+    parser.add_argument("--debug-frame-stale-ms", type=int, default=2000)
+    parser.add_argument(
+        "--no-debug-frames",
+        action="store_true",
+        help="disable UDP Bird's-eye and YOLO dashboard frame receivers",
+    )
     parser.add_argument(
         "--planning-owner",
         choices=("server", "client"),
@@ -1117,7 +1131,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if (args.pose_max_age_ms <= 0 or args.parking_max_age_ms <= 0 or
-            args.vehicle_offline_after_ms <= 0):
+            args.vehicle_offline_after_ms <= 0 or
+            args.debug_frame_stale_ms <= 0):
         raise SystemExit("staleness thresholds must be positive")
     if not args.no_monitoring and args.monitor_port == args.port:
         raise SystemExit("monitor-port must differ from the parking TCP port")
@@ -1134,6 +1149,37 @@ def main() -> None:
 
     monitor_server = None
     monitor_thread = None
+    debug_frame_store = DebugFrameStore(args.debug_frame_stale_ms)
+    debug_receivers: list[UdpJpegReceiver] = []
+    if not args.no_monitoring and not args.no_debug_frames:
+        if args.bird_eye_port == args.detections_port:
+            raise SystemExit("bird-eye-port must differ from detections-port")
+        debug_receivers = [
+            UdpJpegReceiver(
+                args.debug_frame_host,
+                args.bird_eye_port,
+                "bird-eye",
+                debug_frame_store,
+            ),
+            UdpJpegReceiver(
+                args.debug_frame_host,
+                args.detections_port,
+                "detections",
+                debug_frame_store,
+            ),
+        ]
+        try:
+            for receiver in debug_receivers:
+                receiver.start()
+        except OSError as exc:
+            for receiver in debug_receivers:
+                receiver.stop()
+            raise SystemExit(f"cannot bind debug frame UDP receiver: {exc}") from exc
+        print(
+            f"[MONITOR] debug frames UDP {args.debug_frame_host}:"
+            f"{args.bird_eye_port}=bird-eye "
+            f"{args.detections_port}=detections"
+        )
     if not args.no_monitoring:
         monitor_server = MonitoringHTTPServer(
             (args.monitor_host, args.monitor_port),
@@ -1143,6 +1189,7 @@ def main() -> None:
             root / "dashboard" / "frontend" / "dist" / "dashboard" / "browser",
             monitoring_map_metadata(ctx),
             root / "map_reference.png",
+            debug_frame_store,
         )
         monitor_thread = threading.Thread(
             target=monitor_server.serve_forever,
@@ -1178,6 +1225,8 @@ def main() -> None:
                 monitor_server.server_close()
             if monitor_thread is not None:
                 monitor_thread.join(timeout=2.0)
+            for receiver in debug_receivers:
+                receiver.stop()
 
 
 if __name__ == "__main__":

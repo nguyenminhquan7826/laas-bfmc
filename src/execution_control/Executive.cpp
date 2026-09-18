@@ -593,12 +593,24 @@ void Executive::perceptionTick()
     last_perception_frame_timestamp_ms_ = frame.header.timestamp_ms;
 
     LanePerceptionMsg lane;
-    if (lane_perception_.process(frame, lane)) {
+    const bool lane_valid = lane_perception_.process(frame, lane);
+    if (lane_valid) {
         blackboard_.setLane(lane);
-        if (config_.runtime.enable_yolo_udp &&
-            config_.udp.enable_debug_stream &&
-            !lane.bird_eye_view.empty()) {
-            yolo_.sendDebugFrame(lane.bird_eye_view, 80);
+    }
+    if (config_.runtime.enable_yolo_udp &&
+        config_.udp.enable_debug_stream) {
+        cv::Mat debug_bird_eye;
+        if (config_.parking.enable_camera_parking_perception) {
+            parking_perception_.renderBirdEye(
+                frame.frame_bgr,
+                blackboard_.vehiclePose(),
+                debug_bird_eye);
+        }
+        if (debug_bird_eye.empty() && lane_valid) {
+            debug_bird_eye = lane.bird_eye_view;
+        }
+        if (!debug_bird_eye.empty()) {
+            yolo_.sendDebugFrame(debug_bird_eye, 80);
         }
     }
 }

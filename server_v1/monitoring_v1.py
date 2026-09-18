@@ -11,6 +11,8 @@ from __future__ import annotations
 import copy
 import json
 import mimetypes
+import socket
+import struct
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +23,12 @@ from urllib.parse import unquote, urlsplit
 
 DEFAULT_VEHICLE_ID = "car_01"
 DEFAULT_OFFLINE_AFTER_MS = 3000
+DEBUG_FRAME_KINDS = ("bird-eye", "detections")
+JPEG_MAGIC = b"LJPG"
+JPEG_HEADER = struct.Struct("!4sIHHI")
+MAX_JPEG_SIZE = 4 * 1024 * 1024
+MAX_DEBUG_DATAGRAM_SIZE = 65535
+DEBUG_FRAME_REASSEMBLY_TIMEOUT_S = 0.75
 
 
 def _valid_vehicle_id(value: Any) -> bool:
@@ -29,6 +37,222 @@ def _valid_vehicle_id(value: Any) -> bool:
         and 0 < len(value) <= 64
         and all(ch.isalnum() or ch in "_-" for ch in value)
     )
+
+
+class DebugFrameStore:
+    """Thread-safe latest JPEG store for observational dashboard frames."""
+
+    def __init__(self, stale_after_ms: int = 2000) -> None:
+        if stale_after_ms <= 0:
+            raise ValueError("stale_after_ms must be positive")
+        self.stale_after_ms = int(stale_after_ms)
+        self._lock = threading.Lock()
+        self._frames: dict[str, dict[str, Any]] = {}
+
+    def put(
+        self,
+        kind: str,
+        jpeg: bytes,
+        frame_id: int,
+        source: str,
+    ) -> None:
+        if kind not in DEBUG_FRAME_KINDS:
+            raise ValueError("invalid debug frame kind")
+        if not jpeg or len(jpeg) > MAX_JPEG_SIZE:
+            raise ValueError("invalid debug JPEG size")
+        if not jpeg.startswith(b"\xff\xd8") or not jpeg.endswith(b"\xff\xd9"):
+            raise ValueError("invalid debug JPEG payload")
+        now_mono = time.monotonic()
+        with self._lock:
+            self._frames[kind] = {
+                "jpeg": bytes(jpeg),
+                "frame_id": int(frame_id),
+                "source": source,
+                "received_mono": now_mono,
+                "received_utc_ms": int(time.time() * 1000.0),
+            }
+
+    def frame(self, kind: str) -> Optional[tuple[bytes, dict[str, Any]]]:
+        now_mono = time.monotonic()
+        with self._lock:
+            record = self._frames.get(kind)
+            if record is None:
+                return None
+            age_ms = max(0.0, now_mono - record["received_mono"]) * 1000.0
+            if age_ms > self.stale_after_ms:
+                return None
+            metadata = {
+                "kind": kind,
+                "frame_id": record["frame_id"],
+                "source": record["source"],
+                "received_utc_ms": record["received_utc_ms"],
+                "age_ms": round(age_ms, 1),
+                "bytes": len(record["jpeg"]),
+            }
+            return record["jpeg"], metadata
+
+    def status_snapshot(self) -> dict[str, Any]:
+        now_mono = time.monotonic()
+        streams: dict[str, dict[str, Any]] = {}
+        with self._lock:
+            for kind in DEBUG_FRAME_KINDS:
+                record = self._frames.get(kind)
+                if record is None:
+                    streams[kind] = {
+                        "available": False,
+                        "stale": True,
+                        "age_ms": None,
+                    }
+                    continue
+                age_ms = max(
+                    0.0, now_mono - record["received_mono"]
+                ) * 1000.0
+                streams[kind] = {
+                    "available": age_ms <= self.stale_after_ms,
+                    "stale": age_ms > self.stale_after_ms,
+                    "age_ms": round(age_ms, 1),
+                    "frame_id": record["frame_id"],
+                    "source": record["source"],
+                    "received_utc_ms": record["received_utc_ms"],
+                    "bytes": len(record["jpeg"]),
+                }
+        return {
+            "stale_after_ms": self.stale_after_ms,
+            "streams": streams,
+        }
+
+
+class UdpJpegReceiver:
+    """Reassemble the bounded LJPG protocol used by the Pi debug streams."""
+
+    def __init__(
+        self,
+        bind_host: str,
+        port: int,
+        kind: str,
+        store: DebugFrameStore,
+    ) -> None:
+        if kind not in DEBUG_FRAME_KINDS:
+            raise ValueError("invalid debug frame kind")
+        if port <= 0 or port > 65535:
+            raise ValueError("invalid debug frame port")
+        self.bind_host = bind_host
+        self.port = int(port)
+        self.kind = kind
+        self.store = store
+        self._stop = threading.Event()
+        self._socket: Optional[socket.socket] = None
+        self._thread: Optional[threading.Thread] = None
+        self._frames: dict[tuple[str, int, int], dict[str, Any]] = {}
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
+        sock.settimeout(0.2)
+        sock.bind((self.bind_host, self.port))
+        self._socket = sock
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"debug-frame-{self.kind}",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        sock = self._socket
+        self._socket = None
+        if sock is not None:
+            sock.close()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+
+    def _cleanup(self, now_mono: float) -> None:
+        expired = [
+            key for key, state in self._frames.items()
+            if now_mono - state["created_mono"]
+            > DEBUG_FRAME_REASSEMBLY_TIMEOUT_S
+        ]
+        for key in expired:
+            self._frames.pop(key, None)
+
+    def _consume(self, packet: bytes, sender: tuple[str, int]) -> None:
+        if len(packet) < JPEG_HEADER.size:
+            return
+        magic, frame_id, chunk_index, chunk_count, total_size = (
+            JPEG_HEADER.unpack_from(packet)
+        )
+        payload = packet[JPEG_HEADER.size:]
+        if (
+            magic != JPEG_MAGIC
+            or chunk_count == 0
+            or chunk_index >= chunk_count
+            or total_size == 0
+            or total_size > MAX_JPEG_SIZE
+            or not payload
+        ):
+            return
+
+        now_mono = time.monotonic()
+        self._cleanup(now_mono)
+        key = (sender[0], sender[1], frame_id)
+        state = self._frames.get(key)
+        if state is None:
+            state = {
+                "created_mono": now_mono,
+                "chunk_count": chunk_count,
+                "total_size": total_size,
+                "chunks": {},
+            }
+            self._frames[key] = state
+        if (
+            state["chunk_count"] != chunk_count
+            or state["total_size"] != total_size
+        ):
+            self._frames.pop(key, None)
+            return
+        state["chunks"][chunk_index] = payload
+        if len(state["chunks"]) != chunk_count:
+            return
+
+        try:
+            jpeg = b"".join(
+                state["chunks"][index] for index in range(chunk_count)
+            )
+        except KeyError:
+            return
+        finally:
+            self._frames.pop(key, None)
+        if len(jpeg) != total_size:
+            return
+        try:
+            self.store.put(
+                self.kind,
+                jpeg,
+                frame_id,
+                f"{sender[0]}:{sender[1]}",
+            )
+        except ValueError:
+            return
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            sock = self._socket
+            if sock is None:
+                break
+            try:
+                packet, sender = sock.recvfrom(MAX_DEBUG_DATAGRAM_SIZE)
+            except socket.timeout:
+                self._cleanup(time.monotonic())
+                continue
+            except OSError:
+                if not self._stop.is_set():
+                    self._cleanup(time.monotonic())
+                break
+            self._consume(packet, (sender[0], int(sender[1])))
 
 
 class VehicleStateStore:
@@ -314,6 +538,23 @@ class MonitoringHTTPHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_bytes(
+        self,
+        status: int,
+        body: bytes,
+        content_type: str,
+        extra_headers: Optional[dict[str, str]] = None,
+    ) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_OPTIONS(self) -> None:  # noqa: N802 - stdlib callback name
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -351,6 +592,39 @@ class MonitoringHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "map_reference_unavailable"})
             else:
                 self._send_file(reference, "image/png", "no-cache", cors=True)
+            return
+
+        if path == "/api/frames/status":
+            self._send_json(
+                200,
+                self.server.debug_frame_store.status_snapshot(),  # type: ignore[attr-defined]
+            )
+            return
+
+        frame_prefix = "/api/frames/"
+        if path.startswith(frame_prefix):
+            kind = path[len(frame_prefix):]
+            if kind not in DEBUG_FRAME_KINDS:
+                self._send_json(404, {"error": "unknown_frame_stream"})
+                return
+            latest = self.server.debug_frame_store.frame(kind)  # type: ignore[attr-defined]
+            if latest is None:
+                self._send_json(
+                    404,
+                    {"error": "frame_unavailable", "stream": kind},
+                )
+                return
+            jpeg, metadata = latest
+            self._send_bytes(
+                200,
+                jpeg,
+                "image/jpeg",
+                {
+                    "X-Frame-Id": str(metadata["frame_id"]),
+                    "X-Frame-Age-Ms": str(metadata["age_ms"]),
+                    "X-Frame-Source": str(metadata["source"]),
+                },
+            )
             return
 
         if path == "/api/events":
@@ -469,6 +743,7 @@ class MonitoringHTTPServer(ThreadingHTTPServer):
         dashboard_root: Optional[Path] = None,
         map_metadata: Optional[dict[str, Any]] = None,
         map_reference_path: Optional[Path] = None,
+        debug_frame_store: Optional[DebugFrameStore] = None,
     ) -> None:
         self.state_store = state_store
         self.protocol_version = int(protocol_version)
@@ -481,4 +756,5 @@ class MonitoringHTTPServer(ThreadingHTTPServer):
             map_reference_path.resolve()
             if map_reference_path is not None else None
         )
+        self.debug_frame_store = debug_frame_store or DebugFrameStore()
         super().__init__(server_address, MonitoringHTTPHandler)

@@ -137,6 +137,9 @@ GET /api/vehicles
 GET /api/vehicles/{vehicle_id}/status
 GET /api/map
 GET /api/map/reference
+GET /api/frames/status
+GET /api/frames/detections       # latest YOLO bounding-box JPEG
+GET /api/frames/bird-eye         # latest parking-homography JPEG
 GET /api/events                    # Server-Sent Events
 ```
 
@@ -159,7 +162,10 @@ Then open `http://127.0.0.1:5005/`. The dashboard exposes the latest
 protocol-validated Encoder-IMU pose, parking slots, trajectory/session status,
 tracker progress/error, safety gate, UART RX/TX policy, connection state, and
 receive age. In client-owned mode it also draws the Pi-generated Hybrid A*
-trajectory in cyan. SSE updates the screen every 500 ms; REST polling is the
+trajectory in cyan. Its top row contains three debug views: the compact map,
+the YOLO frame with bounding boxes, and the parking-homography bird's-eye view.
+The Python server receives the two JPEG streams on UDP `9998` and `9997`
+respectively. SSE updates vehicle state every 500 ms; REST polling is the
 fallback.
 
 For frontend development, keep the Python server on port 5005 and run:
@@ -280,10 +286,9 @@ Install and start the isolated AI process on the Raspberry Pi:
 
 ```bash
 cd ~/Documents/laas_v0.6.0-p0-batch
-python3 -m venv --system-site-packages ai/.venv
-ai/.venv/bin/pip install -r ai/requirements.txt
-ai/.venv/bin/python ai/run_ai_affinity.py -- \
-  ai/.venv/bin/python ai/best_AI.py \
+python3 -m venv --system-site-packages .venv-ai
+.venv-ai/bin/pip install -r ai/requirements.txt
+.venv-ai/bin/python ai/run_ai_affinity.py \
   --model ai/best_int8.onnx \
   --monitor-ip 192.168.1.105
 ```
@@ -297,10 +302,12 @@ capture that exact image path from the C++ camera stream:
 # Terminal 1: enable C++ -> local AI frames while UART TX remains OFF
 LAAS_PARKING_POSE_BENCH=1 \
 LAAS_PARKING_BENCH_YOLO=1 \
+LAAS_PARKING_BENCH_DEBUG=1 \
+LAAS_MONITOR_IP=192.168.1.105 \
 ./build/laas_pp pp
 
 # Terminal 2: save one already-undistorted frame and exit
-ai/.venv/bin/python ai/best_AI.py \
+.venv-ai/bin/python ai/best_AI.py \
   --model ai/best_int8.onnx \
   --save-first-frame parking_calibration.jpg \
   --monitor-ip ''
@@ -309,7 +316,7 @@ ai/.venv/bin/python ai/best_AI.py \
 Then solve the homography:
 
 ```bash
-ai/.venv/bin/python ai/calibrate_parking_homography.py \
+.venv-ai/bin/python ai/calibrate_parking_homography.py \
   --image parking_calibration.jpg \
   --point u1,v1,forward1,left1 \
   --point u2,v2,forward2,left2 \
@@ -323,9 +330,12 @@ points on vehicles, signs, walls, or a non-flat surface. The script prints
 
 ```bash
 LAAS_PARKING_POSE_BENCH=1 \
+LAAS_PARKING_BENCH_YOLO=1 \
+LAAS_PARKING_BENCH_DEBUG=1 \
 LAAS_PARKING_PERCEPTION=1 \
 LAAS_PARKING_IMAGE_TO_GROUND_H='h00,h01,h02,h10,h11,h12,h20,h21,h22' \
 LAAS_PARKING_SERVER_HOST=192.168.1.105 \
+LAAS_MONITOR_IP=192.168.1.105 \
 ./build/laas_pp pp
 ```
 
@@ -333,3 +343,8 @@ This profile uses real UART RX, real encoder+IMU pose and real camera parking
 status. UART TX remains disabled. Keep the vehicle stationary for the first
 camera/slot validation and compare the dashboard assignment with the physical
 bay before enabling any parking actuation.
+
+For the three dashboard views, allow inbound UDP ports `9997` and `9998` in
+Windows Firewall. The YOLO process sends the annotated frame to `9998`; the C++
+process sends the homography view to `9997`. A stream older than two seconds is
+shown as `WAITING`, independently of the vehicle TCP connection.

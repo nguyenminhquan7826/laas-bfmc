@@ -80,6 +80,13 @@ int main()
     pose.y_m = 0.751;
     pose.yaw_rad = 0.0;
 
+    cv::Mat calibration_frame(480, 640, CV_8UC3, cv::Scalar(20, 30, 40));
+    cv::Mat bird_eye;
+    require(module.renderBirdEye(calibration_frame, pose, bird_eye),
+            "calibrated module should render parking bird-eye debug frame");
+    require(bird_eye.cols == 640 && bird_eye.rows == 480,
+            "parking bird-eye debug frame must use dashboard dimensions");
+
     laas::ParkingStatusMsg result;
     for (std::uint32_t frame_id = 1; frame_id <= 7; ++frame_id) {
         laas::YoloPerceptionMsg perception;

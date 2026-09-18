@@ -23,6 +23,12 @@ export class MonitoringApiService {
     return `${this.baseUrl}/api/map/reference`;
   }
 
+  debugFrame(kind: 'bird-eye' | 'detections'): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/api/frames/${kind}`, {
+      responseType: 'blob',
+    });
+  }
+
   events(onVehicles: (value: VehiclesResponse) => void, onError: () => void): EventSource {
     const stream = new EventSource(`${this.baseUrl}/api/events`);
     stream.addEventListener('vehicles', (event: MessageEvent<string>) => {

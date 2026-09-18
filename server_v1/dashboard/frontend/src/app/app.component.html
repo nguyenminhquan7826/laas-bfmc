@@ -30,8 +30,8 @@
       <div><span>Updated</span><strong>{{ lastUpdated ? (lastUpdated | date:'HH:mm:ss') : '—' }}</strong></div>
     </section>
 
-    <section class="layout">
-      <article class="panel map-panel">
+    <section class="visual-grid">
+      <article class="panel visual-panel map-panel">
         <div class="panel-head">
           <div><p class="eyebrow">Live pose</p><h2>Map localization</h2></div>
           <span class="tag">{{ map?.map_id ?? 'map unavailable' }}</span>
@@ -52,7 +52,32 @@
         </div>
       </article>
 
-      <div class="side-stack">
+      <article class="panel visual-panel">
+        <div class="panel-head">
+          <div><p class="eyebrow">YOLO perception</p><h2>Bounding boxes</h2></div>
+          <span class="tag" [class.live-tag]="detectionsFrameLive">{{ detectionsFrameLive ? 'LIVE' : 'WAITING' }}</span>
+        </div>
+        <div class="debug-stage">
+          <img *ngIf="detectionsFrameUrl; else detectionsWaiting" [src]="detectionsFrameUrl" alt="Camera frame với YOLO bounding boxes">
+          <ng-template #detectionsWaiting><p>Chờ ảnh YOLO từ Pi · UDP 9998</p></ng-template>
+        </div>
+        <div class="frame-footer">Ảnh camera đã vẽ detection · dùng để kiểm tra biển Parking và vehicle</div>
+      </article>
+
+      <article class="panel visual-panel">
+        <div class="panel-head">
+          <div><p class="eyebrow">Parking homography</p><h2>Bird’s-eye view</h2></div>
+          <span class="tag" [class.live-tag]="birdEyeFrameLive">{{ birdEyeFrameLive ? 'LIVE' : 'WAITING' }}</span>
+        </div>
+        <div class="debug-stage">
+          <img *ngIf="birdEyeFrameUrl; else birdEyeWaiting" [src]="birdEyeFrameUrl" alt="Parking bird eye view">
+          <ng-template #birdEyeWaiting><p>Chờ bird’s-eye từ Pi · UDP 9997</p></ng-template>
+        </div>
+        <div class="frame-footer">Mặt phẳng ground (forward/left) · dùng để hiệu chỉnh ma trận H</div>
+      </article>
+    </section>
+
+    <section class="summary-grid">
         <article class="panel">
           <div class="panel-head"><div><p class="eyebrow">Encoder + IMU</p><h2>Localization</h2></div><span class="status-dot" [class.good-dot]="!!v.pose?.pose"></span></div>
           <div class="metric-grid">
@@ -83,7 +108,6 @@
           <div class="line"><span>Replans</span><b>{{ v.session?.replan_count ?? 0 }}</b></div>
           <div class="line"><span>Pause</span><b>{{ v.session?.pause_reason ?? 'none' }}</b></div>
         </article>
-      </div>
     </section>
 
     <section class="card-grid">

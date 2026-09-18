@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import socket
+import struct
 import sys
 import threading
 import unittest
@@ -16,7 +17,12 @@ SERVER_DIR = Path(__file__).resolve().parents[1]
 if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
-from monitoring_v1 import MonitoringHTTPServer, VehicleStateStore
+from monitoring_v1 import (
+    DebugFrameStore,
+    MonitoringHTTPServer,
+    UdpJpegReceiver,
+    VehicleStateStore,
+)
 from server_stub import MAP_ID, PROTOCOL_VERSION, Handler, ReusableTCPServer, ServerContext
 
 
@@ -48,6 +54,7 @@ class MonitoringHarness:
                 "slots": [{"id": "P_B1", "center_m": [2.1, 0.4]}],
             },
             map_reference_path=SERVER_DIR / "map_reference.png",
+            debug_frame_store=DebugFrameStore(stale_after_ms=1000),
         )
         self.http_thread = threading.Thread(
             target=self.http_server.serve_forever, daemon=True
@@ -79,6 +86,14 @@ class MonitoringHarness:
                 json.loads(exc.read().decode("utf-8")),
                 dict(exc.headers),
             )
+
+    def get_bytes(self, path: str) -> tuple[int, bytes, dict]:
+        request = Request(self.base_url + path, method="GET")
+        try:
+            with urlopen(request, timeout=2.0) as response:
+                return response.status, response.read(), dict(response.headers)
+        except HTTPError as exc:
+            return exc.code, exc.read(), dict(exc.headers)
 
 
 class JsonLineClient:
@@ -132,6 +147,27 @@ class VehicleStateStoreTests(unittest.TestCase):
         self.assertFalse(status["connected"])
 
 
+class DebugFrameStoreTests(unittest.TestCase):
+    def test_ljpg_chunks_are_reassembled_out_of_order(self) -> None:
+        store = DebugFrameStore(stale_after_ms=1000)
+        receiver = UdpJpegReceiver("127.0.0.1", 9998, "detections", store)
+        jpeg = b"\xff\xd8dashboard-frame\xff\xd9"
+        chunks = [jpeg[:7], jpeg[7:]]
+        header = struct.Struct("!4sIHHI")
+        sender = ("192.168.1.109", 43210)
+        receiver._consume(  # noqa: SLF001 - focused protocol unit test
+            header.pack(b"LJPG", 7, 1, 2, len(jpeg)) + chunks[1], sender
+        )
+        receiver._consume(  # noqa: SLF001 - focused protocol unit test
+            header.pack(b"LJPG", 7, 0, 2, len(jpeg)) + chunks[0], sender
+        )
+        latest = store.frame("detections")
+        self.assertIsNotNone(latest)
+        assert latest is not None
+        self.assertEqual(latest[0], jpeg)
+        self.assertEqual(latest[1]["frame_id"], 7)
+
+
 class MonitoringApiIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.harness = MonitoringHarness()
@@ -167,6 +203,24 @@ class MonitoringApiIntegrationTests(unittest.TestCase):
         status, payload, _ = self.harness.get("/")
         self.assertEqual(status, 503)
         self.assertEqual(payload["error"], "dashboard_not_built")
+
+    def test_debug_frame_status_and_jpeg_endpoint(self) -> None:
+        status, payload, _ = self.harness.get("/api/frames/status")
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["streams"]["bird-eye"]["available"])
+        self.assertFalse(payload["streams"]["detections"]["available"])
+
+        jpeg = b"\xff\xd8test-jpeg\xff\xd9"
+        self.harness.http_server.debug_frame_store.put(
+            "bird-eye", jpeg, 12, "192.168.1.109:40000"
+        )
+        status, body, headers = self.harness.get_bytes(
+            "/api/frames/bird-eye"
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, jpeg)
+        self.assertEqual(headers.get("Content-Type"), "image/jpeg")
+        self.assertEqual(headers.get("X-Frame-Id"), "12")
 
     def test_tcp_pose_is_visible_through_http(self) -> None:
         pose = {

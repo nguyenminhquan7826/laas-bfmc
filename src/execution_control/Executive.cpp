@@ -599,18 +599,12 @@ void Executive::perceptionTick()
     }
     if (config_.runtime.enable_yolo_udp &&
         config_.udp.enable_debug_stream) {
-        cv::Mat debug_bird_eye;
-        if (config_.parking.enable_camera_parking_perception) {
-            parking_perception_.renderBirdEye(
-                frame.frame_bgr,
-                blackboard_.vehiclePose(),
-                debug_bird_eye);
-        }
-        if (debug_bird_eye.empty() && lane_valid) {
-            debug_bird_eye = lane.bird_eye_view;
-        }
-        if (!debug_bird_eye.empty()) {
-            yolo_.sendDebugFrame(debug_bird_eye, 80);
+        // UDP 9997 mirrors the exact IPM image consumed by lane detection and
+        // centre-line control. Parking homography is deliberately excluded:
+        // it maps YOLO footpoints to metric ground coordinates and must never
+        // replace the lane detector's independent pixel-to-pixel IPM.
+        if (!lane.bird_eye_view.empty()) {
+            yolo_.sendDebugFrame(lane.bird_eye_view, 80);
         }
     }
 }

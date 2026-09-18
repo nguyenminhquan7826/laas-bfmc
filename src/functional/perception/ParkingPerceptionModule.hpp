@@ -26,13 +26,6 @@ public:
                  std::uint64_t now_ms,
                  ParkingStatusMsg& output);
 
-    // Observational debug view only. Warps the undistorted camera frame onto
-    // the rear-axle-centred parking ground plane and overlays metric grid/slot
-    // geometry. It is never consumed by planning or actuation.
-    bool renderBirdEye(const cv::Mat& frame_bgr,
-                       const VehiclePoseMsg& pose,
-                       cv::Mat& output) const;
-
 private:
     struct Slot {
         std::string id;

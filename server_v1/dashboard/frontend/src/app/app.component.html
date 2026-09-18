@@ -66,14 +66,14 @@
 
       <article class="panel visual-panel">
         <div class="panel-head">
-          <div><p class="eyebrow">Parking homography</p><h2>Bird’s-eye view</h2></div>
+          <div><p class="eyebrow">Lane perception</p><h2>Bird’s-eye + centerline</h2></div>
           <span class="tag" [class.live-tag]="birdEyeFrameLive">{{ birdEyeFrameLive ? 'LIVE' : 'WAITING' }}</span>
         </div>
         <div class="debug-stage">
-          <img *ngIf="birdEyeFrameUrl; else birdEyeWaiting" [src]="birdEyeFrameUrl" alt="Parking bird eye view">
+          <img *ngIf="birdEyeFrameUrl; else birdEyeWaiting" [src]="birdEyeFrameUrl" alt="Lane bird eye view and centerline">
           <ng-template #birdEyeWaiting><p>Chờ bird’s-eye từ Pi · UDP 9997</p></ng-template>
         </div>
-        <div class="frame-footer">Mặt phẳng ground (forward/left) · dùng để hiệu chỉnh ma trận H</div>
+        <div class="frame-footer">Ảnh IPM thực tế dùng để phát hiện làn và tính centerline điều khiển</div>
       </article>
     </section>
 

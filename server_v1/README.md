@@ -139,7 +139,7 @@ GET /api/map
 GET /api/map/reference
 GET /api/frames/status
 GET /api/frames/detections       # latest YOLO bounding-box JPEG
-GET /api/frames/bird-eye         # latest parking-homography JPEG
+GET /api/frames/bird-eye         # latest lane-IPM/centerline JPEG
 GET /api/events                    # Server-Sent Events
 ```
 

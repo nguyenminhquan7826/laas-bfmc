@@ -40,11 +40,6 @@ bool knownSlotId(const std::string& id)
            id == "P_T1" || id == "P_T2";
 }
 
-constexpr int kDebugBevWidthPx = 640;
-constexpr int kDebugBevHeightPx = 480;
-constexpr double kDebugBevPixelsPerMeter = 160.0;
-constexpr double kDebugBevGridStepM = 0.5;
-
 }  // namespace
 
 ParkingPerceptionModule::ParkingPerceptionModule(const Config& config)
@@ -207,97 +202,6 @@ bool ParkingPerceptionModule::groundToImage(double forward_m, double left_m,
         return false;
     }
     pixel = cv::Point2f(static_cast<float>(u), static_cast<float>(v));
-    return true;
-}
-
-bool ParkingPerceptionModule::renderBirdEye(
-    const cv::Mat& frame_bgr,
-    const VehiclePoseMsg& pose,
-    cv::Mat& output) const
-{
-    output.release();
-    if (!ready_ || frame_bgr.empty()) {
-        return false;
-    }
-
-    const double centre_x = 0.5 * static_cast<double>(kDebugBevWidthPx - 1);
-    const double bottom_y = static_cast<double>(kDebugBevHeightPx - 1);
-    const cv::Matx33d ground_to_bev(
-        0.0, -kDebugBevPixelsPerMeter, centre_x,
-        -kDebugBevPixelsPerMeter, 0.0, bottom_y,
-        0.0, 0.0, 1.0);
-    const cv::Matx33d image_to_bev = ground_to_bev * image_to_ground_;
-    cv::warpPerspective(
-        frame_bgr,
-        output,
-        cv::Mat(image_to_bev),
-        cv::Size(kDebugBevWidthPx, kDebugBevHeightPx),
-        cv::INTER_LINEAR,
-        cv::BORDER_CONSTANT,
-        cv::Scalar(8, 12, 18));
-
-    const cv::Scalar grid_colour(75, 82, 92);
-    const cv::Scalar axis_colour(40, 210, 255);
-    const double max_forward_m = bottom_y / kDebugBevPixelsPerMeter;
-    for (double forward = kDebugBevGridStepM;
-         forward <= max_forward_m + 1.0e-9;
-         forward += kDebugBevGridStepM) {
-        const int y = static_cast<int>(std::lround(
-            bottom_y - forward * kDebugBevPixelsPerMeter));
-        cv::line(output, cv::Point(0, y),
-                 cv::Point(kDebugBevWidthPx - 1, y),
-                 grid_colour, 1, cv::LINE_AA);
-        cv::putText(output, std::to_string(forward).substr(0, 3) + " m",
-                    cv::Point(8, std::max(14, y - 4)),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.38,
-                    grid_colour, 1, cv::LINE_AA);
-    }
-    const double max_left_m = centre_x / kDebugBevPixelsPerMeter;
-    for (double left = -max_left_m; left <= max_left_m + 1.0e-9;
-         left += kDebugBevGridStepM) {
-        const int x = static_cast<int>(std::lround(
-            centre_x - left * kDebugBevPixelsPerMeter));
-        cv::line(output, cv::Point(x, 0),
-                 cv::Point(x, kDebugBevHeightPx - 1),
-                 std::fabs(left) < 1.0e-9 ? axis_colour : grid_colour,
-                 std::fabs(left) < 1.0e-9 ? 2 : 1, cv::LINE_AA);
-    }
-
-    if (pose.header.valid) {
-        for (const Slot& slot : slots_) {
-            std::vector<cv::Point> polygon;
-            polygon.reserve(slot.polygon_map.size());
-            for (const cv::Point2d& map_point : slot.polygon_map) {
-                const cv::Point2d ground = mapToGround(map_point, pose);
-                polygon.emplace_back(
-                    static_cast<int>(std::lround(
-                        centre_x - ground.y * kDebugBevPixelsPerMeter)),
-                    static_cast<int>(std::lround(
-                        bottom_y - ground.x * kDebugBevPixelsPerMeter)));
-            }
-            if (polygon.size() >= 3U) {
-                cv::polylines(output, polygon, true,
-                              cv::Scalar(71, 223, 159), 2, cv::LINE_AA);
-                const cv::Point label = polygon.front() + cv::Point(4, -5);
-                cv::putText(output, slot.id, label,
-                            cv::FONT_HERSHEY_SIMPLEX, 0.42,
-                            cv::Scalar(71, 223, 159), 1, cv::LINE_AA);
-            }
-        }
-    }
-
-    const cv::Point rear_axle(
-        static_cast<int>(std::lround(centre_x)),
-        static_cast<int>(std::lround(bottom_y)));
-    cv::circle(output, rear_axle, 6, cv::Scalar(40, 210, 255), -1,
-               cv::LINE_AA);
-    cv::arrowedLine(output, rear_axle,
-                    rear_axle + cv::Point(0, -55),
-                    axis_colour, 2, cv::LINE_AA, 0, 0.25);
-    cv::putText(output, "rear axle / +forward",
-                cv::Point(rear_axle.x + 10, rear_axle.y - 12),
-                cv::FONT_HERSHEY_SIMPLEX, 0.42,
-                axis_colour, 1, cv::LINE_AA);
     return true;
 }
 

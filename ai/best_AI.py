@@ -53,7 +53,7 @@ class Settings:
     result_format: str = "perception"
     save_first_frame: Optional[Path] = None
 
-    monitor_ip: str = "192.168.1.253"
+    monitor_ip: str = "192.168.1.105"
     monitor_port: int = 9998
     monitor_fps: float = 10.0
     monitor_jpeg_quality: int = 75
@@ -119,7 +119,7 @@ def parse_args() -> Settings:
 
     parser.add_argument(
         "--monitor-ip",
-        default=env_default("LAAS_MONITOR_IP", "192.168.1.253"),
+        default=env_default("LAAS_MONITOR_IP", "192.168.1.105"),
         help="Laptop IP; pass an empty string to disable annotated streaming",
     )
     parser.add_argument("--monitor-port", type=int, default=9998)

@@ -91,8 +91,12 @@ int main(int argc, char* argv[])
     const bool parking_bench_enabled =
         bench_env && std::string(bench_env) == "1";
 
+    // The calibrated RX-only pose/perception profile is the safe default for
+    // ./build/laas_pp pp. Set LAAS_PARKING_POSE_BENCH=0 to opt out.
     const bool parking_pose_bench_enabled =
-        pose_bench_env && std::string(pose_bench_env) == "1";
+        pose_bench_env
+            ? std::string(pose_bench_env) == "1"
+            : !parking_bench_enabled;
 
     // Fail closed if two mutually exclusive parking bench profiles are
     // accidentally enabled together.
@@ -216,14 +220,15 @@ int main(int argc, char* argv[])
         const char* pose_bench_yolo_env =
             std::getenv("LAAS_PARKING_BENCH_YOLO");
         const bool pose_bench_yolo_enabled =
-            pose_bench_yolo_env &&
+            !pose_bench_yolo_env ||
             std::string(pose_bench_yolo_env) == "1";
         config.runtime.enable_yolo_udp = pose_bench_yolo_enabled;
         const char* pose_bench_debug_env =
             std::getenv("LAAS_PARKING_BENCH_DEBUG");
         const bool pose_bench_debug_enabled =
-            pose_bench_yolo_enabled && pose_bench_debug_env &&
-            std::string(pose_bench_debug_env) == "1";
+            pose_bench_yolo_enabled &&
+            (!pose_bench_debug_env ||
+             std::string(pose_bench_debug_env) == "1");
         config.udp.enable_debug_stream = pose_bench_debug_enabled;
 
         config.parking.enable = true;
@@ -303,8 +308,12 @@ int main(int argc, char* argv[])
     // profile. It replaces the four synthetic slot states while preserving the
     // existing RX-only UART safety boundary.
     const char* perception_env = std::getenv("LAAS_PARKING_PERCEPTION");
+    // Camera parking perception follows the default pose bench unless an
+    // explicit LAAS_PARKING_PERCEPTION=0 override disables it.
     const bool parking_perception_enabled =
-        perception_env && std::string(perception_env) == "1";
+        perception_env
+            ? std::string(perception_env) == "1"
+            : parking_pose_bench_enabled;
     if (parking_perception_enabled) {
         if (!config.parking.enable) {
             std::cerr << "[APP] LAAS_PARKING_PERCEPTION requires "
@@ -314,12 +323,19 @@ int main(int argc, char* argv[])
 
         const char* homography_env =
             std::getenv("LAAS_PARKING_IMAGE_TO_GROUND_H");
-        if (!homography_env ||
-            !parseHomography(homography_env,
-                             config.parking.image_to_ground_homography)) {
+        if (homography_env && *homography_env) {
+            if (!parseHomography(
+                    homography_env,
+                    config.parking.image_to_ground_homography)) {
+                std::cerr
+                    << "[APP] LAAS_PARKING_IMAGE_TO_GROUND_H must contain "
+                    << "9 comma-separated coefficients.\n";
+                return 5;
+            }
+            config.parking.image_to_ground_homography_valid = true;
+        } else if (!config.parking.image_to_ground_homography_valid) {
             std::cerr
-                << "[APP] LAAS_PARKING_IMAGE_TO_GROUND_H must contain "
-                << "9 comma-separated coefficients.\n";
+                << "[APP] No valid parking homography is configured.\n";
             return 5;
         }
 

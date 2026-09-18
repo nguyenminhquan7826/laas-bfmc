@@ -31,7 +31,7 @@ struct UdpConfig {
     bool enable_debug_stream = true;
 
     // Change this to the current IPv4 address of the monitoring laptop.
-    std::string monitor_ip = "192.168.1.253";
+    std::string monitor_ip = "192.168.1.105";
 
     // C++ camera -> local Python ONNX process.
     int yolo_send_port = 9996;
@@ -92,7 +92,7 @@ struct ParkingConfig {
     std::string map_id = "map_v1";
     std::string map_package_sha256 =
         "185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7";
-    std::string server_host = "127.0.0.1";
+    std::string server_host = "192.168.1.105";
     int server_port = 5000;
     int reconnect_period_ms = 1000;
     int max_ndjson_line_bytes = 65536;
@@ -136,11 +136,13 @@ struct ParkingConfig {
     // then performed in the map frame using the live encoder+IMU pose.
     bool enable_camera_parking_perception = false;
     std::string slot_map_file = "server_v1/map_v1.yaml";
-    bool image_to_ground_homography_valid = false;
+    // Calibrated 640x480 undistorted-camera homography for the current
+    // fixed camera mount. Environment variables may override it at runtime.
+    bool image_to_ground_homography_valid = true;
     std::array<double, 9> image_to_ground_homography{{
-        0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0,
+        1.74852922408e-06, -0.0010714978163, -0.141643766971,
+        0.00117325927189, -7.37088678025e-05, -0.362523884649,
+        -6.69184825887e-06, -0.00572221659179, 1.0,
     }};
     float parking_sign_min_confidence = 0.50F;
     float vehicle_min_confidence = 0.45F;

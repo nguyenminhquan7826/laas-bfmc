@@ -181,6 +181,50 @@ export class AppComponent implements OnInit, OnDestroy {
     }).join(' ');
   }
 
+  slotPolygonPoints(polygon: number[][] | undefined): string | null {
+    if (!polygon?.length || !this.map?.width_x_m || !this.map.height_y_m) {
+      return null;
+    }
+    return polygon.map(point => {
+      const x = Math.max(0, Math.min(1000,
+        point[0] / this.map!.width_x_m * 1000));
+      const y = Math.max(0, Math.min(1000,
+        (1 - point[1] / this.map!.height_y_m) * 1000));
+      return `${x},${y}`;
+    }).join(' ');
+  }
+
+  slotLabelX(center: number[] | undefined): number {
+    if (!center?.length || !this.map?.width_x_m) return 0;
+    return Math.max(0, Math.min(1000, center[0] / this.map.width_x_m * 1000));
+  }
+
+  slotLabelY(center: number[] | undefined): number {
+    if (!center?.length || !this.map?.height_y_m) return 0;
+    return Math.max(0, Math.min(1000,
+      (1 - center[1] / this.map.height_y_m) * 1000));
+  }
+
+  slotStateClass(slotId: string): string {
+    const state = this.slotState(slotId);
+    if (state === 'FREE') return 'free';
+    if (state === 'OCCUPIED') return 'occupied';
+    return 'unknown';
+  }
+
+  slotTooltip(slotId: string): string {
+    const confidence = this.slotConfidence(slotId);
+    const suffix = confidence === null ? '' : ` · ${Math.round(confidence * 100)}%`;
+    return `${slotId}: ${this.slotState(slotId)}${suffix}`;
+  }
+
+  isTargetSlot(slotId: string): boolean {
+    const target = this.vehicle?.session?.target_slot
+      ?? this.vehicle?.local_trajectory?.target_slot
+      ?? this.vehicle?.navigation?.target_slot;
+    return target === slotId;
+  }
+
   safetyValue(key: string): unknown {
     return this.vehicle?.safety?.[key] ?? null;
   }

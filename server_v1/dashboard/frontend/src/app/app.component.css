@@ -27,11 +27,24 @@ select { min-width: 120px; border-radius: 8px; }
 .map-stage { position: relative; overflow: hidden; border-radius: 9px; border: 1px solid #17283a; background: #d5d9db; aspect-ratio: 4.469 / 4.41; width: min(100%, 390px); margin-inline: auto; }
 .map-stage img { display: block; width: 100%; height: 100%; object-fit: fill; filter: saturate(.76) contrast(1.06); }
 .map-stage.no-pose img { opacity: .72; }
-.trajectory-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.trajectory-overlay polyline { fill: none; stroke: #24c7ff; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 4px rgba(36, 199, 255, .9)); }
-.car-marker { position: absolute; z-index: 1; width: 34px; height: 18px; border-radius: 5px 9px 9px 5px; background: #16c784; border: 2px solid white; box-shadow: 0 0 0 5px rgba(22, 199, 132, .22), 0 4px 14px rgba(0,0,0,.45); transition: left .25s linear, top .25s linear, transform .25s linear; transform-origin: center; }
+.map-overlay { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.map-slot polygon { stroke-width: 2; vector-effect: non-scaling-stroke; transition: fill .2s ease, stroke .2s ease; }
+.map-slot text { fill: #edf5fb; stroke: rgba(2, 8, 13, .92); stroke-width: 3px; paint-order: stroke fill; font-size: 29px; font-weight: 900; letter-spacing: 1px; }
+.map-slot.free polygon { fill: rgba(31, 202, 132, .36); stroke: #4ee0a1; }
+.map-slot.occupied polygon { fill: rgba(238, 68, 68, .48); stroke: #ff7373; }
+.map-slot.unknown polygon { fill: rgba(119, 135, 151, .30); stroke: #9babb8; stroke-dasharray: 6 5; }
+.map-slot.target polygon { stroke: #24c7ff; stroke-width: 4; filter: drop-shadow(0 0 5px rgba(36, 199, 255, .95)); }
+.trajectory-line { fill: none; stroke: #24c7ff; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 4px rgba(36, 199, 255, .9)); }
+.car-marker { position: absolute; z-index: 2; width: 34px; height: 18px; border-radius: 5px 9px 9px 5px; background: #16c784; border: 2px solid white; box-shadow: 0 0 0 5px rgba(22, 199, 132, .22), 0 4px 14px rgba(0,0,0,.45); transition: left .25s linear, top .25s linear, transform .25s linear; transform-origin: center; }
 .car-marker span { position: absolute; right: -8px; top: 4px; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 7px solid white; }
-.map-message { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%); padding: 10px 14px; border-radius: 8px; color: white; background: rgba(4, 11, 18, .78); }
+.map-message { position: absolute; z-index: 3; inset: 50% auto auto 50%; transform: translate(-50%, -50%); padding: 10px 14px; border-radius: 8px; color: white; background: rgba(4, 11, 18, .78); }
+.map-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px 12px; padding-top: 9px; color: #8296a8; font-size: .65rem; }
+.map-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.map-legend i { width: 9px; height: 9px; border-radius: 2px; border: 1px solid transparent; }
+.map-legend i.free { background: rgba(31, 202, 132, .55); border-color: #4ee0a1; }
+.map-legend i.occupied { background: rgba(238, 68, 68, .65); border-color: #ff7373; }
+.map-legend i.unknown { background: rgba(119, 135, 151, .45); border-color: #9babb8; }
+.map-legend i.target { background: transparent; border: 2px solid #24c7ff; box-shadow: 0 0 4px rgba(36, 199, 255, .8); }
 .map-footer { color: #71879a; font-size: .72rem; padding-top: 11px; }
 .debug-stage { display: grid; place-items: center; overflow: hidden; border-radius: 9px; border: 1px solid #17283a; background: #02070c; aspect-ratio: 4 / 3; }
 .debug-stage img { display: block; width: 100%; height: 100%; object-fit: contain; }

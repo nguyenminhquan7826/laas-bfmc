@@ -38,13 +38,33 @@
         </div>
         <div class="map-stage" [class.no-pose]="!v.pose?.pose">
           <img [src]="mapImageUrl" alt="Bản đồ BFMC map_v1">
-          <svg *ngIf="localTrajectoryPolyline() as polyline"
-               class="trajectory-overlay" viewBox="0 0 1000 1000"
-               preserveAspectRatio="none" aria-label="Quỹ đạo Hybrid A* do Pi lập">
-            <polyline [attr.points]="polyline"></polyline>
+          <svg class="map-overlay" viewBox="0 0 1000 1000"
+               preserveAspectRatio="none" aria-label="Trạng thái chỗ đỗ và quỹ đạo trên bản đồ">
+            <ng-container *ngFor="let slot of map?.slots">
+              <g *ngIf="slotPolygonPoints(slot.polygon_m) as polygon"
+                 class="map-slot"
+                 [class.free]="slotStateClass(slot.id) === 'free'"
+                 [class.occupied]="slotStateClass(slot.id) === 'occupied'"
+                 [class.unknown]="slotStateClass(slot.id) === 'unknown'"
+                 [class.target]="isTargetSlot(slot.id)">
+                <title>{{ slotTooltip(slot.id) }}</title>
+                <polygon [attr.points]="polygon"></polygon>
+                <text [attr.x]="slotLabelX(slot.center_m)"
+                      [attr.y]="slotLabelY(slot.center_m)"
+                      text-anchor="middle" dominant-baseline="middle">{{ slot.id }}</text>
+              </g>
+            </ng-container>
+            <polyline *ngIf="localTrajectoryPolyline() as polyline"
+                      class="trajectory-line" [attr.points]="polyline"></polyline>
           </svg>
           <div class="car-marker" [ngStyle]="poseMarkerStyle()"><span></span></div>
           <p *ngIf="!v.pose?.pose" class="map-message">Chưa có pose hợp lệ</p>
+        </div>
+        <div class="map-legend" aria-label="Chú giải trạng thái chỗ đỗ">
+          <span><i class="free"></i>Trống</span>
+          <span><i class="occupied"></i>Đã chiếm</span>
+          <span><i class="unknown"></i>Chưa xác định</span>
+          <span><i class="target"></i>Slot đích</span>
         </div>
         <div class="map-footer">
           <span>{{ map?.width_x_m | number:'1.3-3' }} × {{ map?.height_y_m | number:'1.3-3' }} m · map pkg v{{ map?.map_package?.package_version ?? '—' }}</span>

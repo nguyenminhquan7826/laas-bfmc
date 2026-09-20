@@ -2,7 +2,7 @@
   "schema_version": 1,
   "map_id": "map_v1",
   "package_version": 2,
-  "package_sha256": "185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7",
+  "package_sha256": "807fd4c49c396a7ee3c43c5afb3f44b75248fdd07fb867376562999de6acaa22",
   "yaw_convention": "MAP_CCW_POSITIVE_SENSOR_CW_CONVERTED_AT_PI",
   "files": [
     {
@@ -17,8 +17,8 @@
     },
     {
       "path": "planner_v1.yaml",
-      "size_bytes": 2160,
-      "sha256": "787958f525ce20d0ff39db6c0b28f5b11708984ab6a81443ff78abc470d8943c"
+      "size_bytes": 3047,
+      "sha256": "cad0b7ebab06c21fdae780339eb6c320990baef27a02c9e87abe063fb69a98b1"
     },
     {
       "path": "drivable_grid_v1.json",

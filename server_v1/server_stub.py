@@ -20,8 +20,19 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from hybrid_astar_v1 import HybridAStarPlanner, Node, Pose, build_slot_obstacles, load_yaml
-from slot_selector_v1 import SlotPlan, choose_best_free_slot
+from hybrid_astar_v1 import (
+    HybridAStarPlanner,
+    Node,
+    Pose,
+    build_slot_obstacles,
+    load_yaml,
+    slot_rect,
+)
+from slot_selector_v1 import (
+    SlotPlan,
+    choose_best_free_slot,
+    rear_axle_goal_for_slot,
+)
 from parking_session_v1 import ParkingSession
 from monitoring_v1 import (
     DebugFrameStore,
@@ -467,6 +478,7 @@ def validate_plan_candidate(
 
     obstacles = build_slot_obstacles(ctx.map_cfg, states, target_slot=selected.slot_id)
     max_steer = max((abs(v) for v in ctx.planner.steering_samples), default=0.0)
+    direction_switches = 0
 
     for i, node in enumerate(path):
         for value_name, value in (("x", node.x), ("y", node.y), ("yaw", node.yaw), ("g", node.g), ("steer", node.steer_rad)):
@@ -485,6 +497,10 @@ def validate_plan_candidate(
             return False, f"steering_out_of_range:{i}"
 
         prev = path[i - 1]
+        if prev.direction != 0 and node.direction != prev.direction:
+            direction_switches += 1
+            if direction_switches > ctx.planner.max_direction_switches:
+                return False, f"too_many_direction_switches:{i}"
         replay = ctx.planner.simulate_primitive(prev, node.direction, node.steer_rad, obstacles)
         if replay is None:
             return False, f"primitive_replay_collision:{i}"
@@ -492,6 +508,18 @@ def validate_plan_candidate(
         yaw_err = abs(ctx.planner.normalize_angle(replay.yaw - node.yaw))
         if pos_err > 1e-5 or yaw_err > 1e-5:
             return False, f"primitive_replay_mismatch:{i}"
+
+    slot_cfg = next(
+        slot
+        for slot in ctx.map_cfg.get("slots", [])
+        if slot.get("id") == selected.slot_id
+    )
+    if not ctx.planner.goal_reached(
+        path[-1],
+        selected.goal,
+        goal_region=slot_rect(slot_cfg, selected.slot_id),
+    ):
+        return False, "terminal_goal_contract_failed"
 
     return True, "ok"
 
@@ -526,8 +554,12 @@ def validate_serialized_trajectory(
     max_speed = abs(ctx.nominal_speed) * 1.05 + 1e-9
     max_spacing = max(0.15, ctx.planner.motion_step * 1.25)
     max_yaw_step = max(0.35, 2.0 * ctx.planner.motion_step / ctx.planner.wheelbase * math.tan(ctx.planner.max_steer))
+    max_curvature = math.tan(ctx.planner.max_steer) / ctx.planner.wheelbase
 
     prev: Optional[dict[str, Any]] = None
+    previous_direction: Optional[str] = None
+    direction_switches = 0
+    terminal_travel_m = 0.0
     for i, point in enumerate(points):
         if not isinstance(point, dict):
             return False, f"trajectory_point_not_object:{i}"
@@ -559,7 +591,78 @@ def validate_serialized_trajectory(
             yaw_step = abs(ctx.planner.normalize_angle(vals["yaw_rad"] - float(prev["yaw_rad"])))
             if yaw_step > max_yaw_step:
                 return False, f"trajectory_yaw_jump_too_large:{i}"
+
+            signed_yaw_step = ctx.planner.normalize_angle(
+                vals["yaw_rad"] - float(prev["yaw_rad"])
+            )
+            midpoint_yaw = float(prev["yaw_rad"]) + 0.5 * signed_yaw_step
+            longitudinal = dx * math.cos(midpoint_yaw) + dy * math.sin(midpoint_yaw)
+            lateral = -dx * math.sin(midpoint_yaw) + dy * math.cos(midpoint_yaw)
+            if spacing > 1e-6:
+                if direction == "FORWARD" and longitudinal <= 1e-8:
+                    return False, f"trajectory_motion_direction_mismatch:{i}"
+                if direction == "REVERSE" and longitudinal >= -1e-8:
+                    return False, f"trajectory_motion_direction_mismatch:{i}"
+                max_lateral_error = max(0.01, 0.05 * spacing)
+                if abs(lateral) > max_lateral_error:
+                    return False, f"trajectory_nonholonomic_slip:{i}"
+                curvature = abs(signed_yaw_step / longitudinal)
+                if curvature > max_curvature * 1.05 + 1e-6:
+                    return False, f"trajectory_curvature_exceeds_limit:{i}"
+
+            if previous_direction is not None and direction != previous_direction:
+                direction_switches += 1
+                if direction_switches > ctx.planner.max_direction_switches:
+                    return False, f"trajectory_too_many_direction_switches:{i}"
+                terminal_travel_m = spacing
+            else:
+                terminal_travel_m += spacing
+        previous_direction = str(direction)
         prev = point
+
+    final_direction = str(points[-1]["direction"])
+    required_direction = ctx.planner.required_final_direction
+    if required_direction > 0 and final_direction != "FORWARD":
+        return False, "trajectory_final_direction_not_forward"
+    if required_direction < 0 and final_direction != "REVERSE":
+        return False, "trajectory_final_direction_not_reverse"
+    # Chord length is marginally shorter than the integrated arc length stored
+    # by the planner, so allow 5 mm for serialization/arc discretization.
+    if terminal_travel_m + 0.005 < ctx.planner.minimum_terminal_travel_m:
+        return False, "trajectory_terminal_travel_too_short"
+
+    slot_cfg = next(
+        (slot for slot in ctx.map_cfg.get("slots", []) if slot.get("id") == target_slot),
+        None,
+    )
+    if slot_cfg is None:
+        return False, "trajectory_target_slot_missing_from_map"
+    goal, _, _ = rear_axle_goal_for_slot(slot_cfg, ctx.vehicle_cfg)
+    final_point = points[-1]
+    final_pose = Pose(
+        float(final_point["x_m"]),
+        float(final_point["y_m"]),
+        float(final_point["yaw_rad"]),
+    )
+    final_pos_error = math.hypot(final_pose.x - goal.x, final_pose.y - goal.y)
+    final_yaw_error = abs(ctx.planner.normalize_angle(final_pose.yaw - goal.yaw))
+    if final_pos_error > ctx.planner.goal_pos_tol + 1e-6:
+        return False, "trajectory_terminal_position_mismatch"
+    if final_yaw_error > ctx.planner.goal_yaw_tol + 1e-6:
+        return False, "trajectory_terminal_yaw_mismatch"
+
+    if ctx.planner.collision_mode == ctx.planner.FULL_FOOTPRINT_MODE:
+        xs = [float(vertex[0]) for vertex in slot_cfg["polygon_m"]]
+        ys = [float(vertex[1]) for vertex in slot_cfg["polygon_m"]]
+        slot_x_min, slot_x_max = min(xs), max(xs)
+        slot_y_min, slot_y_max = min(ys), max(ys)
+        boundary_tolerance = ctx.planner.terminal_slot_boundary_tolerance_m
+        for corner_x, corner_y in ctx.planner.footprint_corners(final_pose):
+            if not (
+                slot_x_min - boundary_tolerance <= corner_x <= slot_x_max + boundary_tolerance
+                and slot_y_min - boundary_tolerance <= corner_y <= slot_y_max + boundary_tolerance
+            ):
+                return False, "trajectory_terminal_footprint_outside_slot"
 
     return True, "ok"
 
@@ -633,7 +736,7 @@ def build_trajectory_response(
             "parking_status": round(float(parking_age_ms), 1),
         },
         "validation": "PASS",
-        "prototype_warning": "OFFLINE_ONLY_FULL_VEHICLE_FOOTPRINT_NOT_VERIFIED",
+        "prototype_warning": "OFFLINE_ONLY_ACTUATION_NOT_AUTHORIZED",
         "points": points,
     }
     ok, reason = validate_serialized_trajectory(ctx, response, states)

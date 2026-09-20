@@ -91,7 +91,7 @@ struct ParkingConfig {
 
     std::string map_id = "map_v1";
     std::string map_package_sha256 =
-        "185f84b2e16ff12177a5658480f263285a93123cec7a01a487483d39869c70a7";
+        "807fd4c49c396a7ee3c43c5afb3f44b75248fdd07fb867376562999de6acaa22";
     std::string server_host = "192.168.1.105";
     int server_port = 5000;
     int reconnect_period_ms = 1000;
@@ -119,6 +119,9 @@ struct ParkingConfig {
     double trajectory_max_point_spacing_m = 0.15;
     double trajectory_max_yaw_step_rad = 0.40;
     int trajectory_max_points = 5000;
+    int trajectory_max_direction_switches = 4;
+    bool trajectory_require_final_reverse = true;
+    double trajectory_min_terminal_travel_m = 0.20;
 
     // Bench-only parking occupancy source. Defaults are deliberately UNKNOWN;
     // no slot is considered FREE unless a test explicitly configures it.

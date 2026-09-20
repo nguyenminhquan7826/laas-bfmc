@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from hybrid_astar_v1 import Pose, build_slot_obstacles
+from hybrid_astar_v1 import Pose, build_slot_obstacles, slot_rect
 from map_package_v1 import load_and_verify_manifest
 from server_stub import ServerContext, build_trajectory_response
 from slot_selector_v1 import SlotPlan, rear_axle_goal_for_slot
@@ -92,7 +92,12 @@ def plan_local_request(root: Path, request: dict[str, Any]) -> dict[str, Any]:
 
     goal, body_target, goal_mode = rear_axle_goal_for_slot(slot_cfg, ctx.vehicle_cfg)
     obstacles = build_slot_obstacles(ctx.map_cfg, states, target_slot=target_slot)
-    result = ctx.planner.plan(pose, goal, obstacles)
+    result = ctx.planner.plan(
+        pose,
+        goal,
+        obstacles,
+        goal_region=slot_rect(slot_cfg, target_slot),
+    )
     if not result.success:
         return _failure(f"hybrid_astar:{result.reason}", decision_id)
 

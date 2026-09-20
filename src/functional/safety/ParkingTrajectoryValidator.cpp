@@ -84,6 +84,16 @@ ParkingTrajectoryValidationResult ParkingTrajectoryValidator::validate(
 
     const double max_speed =
         static_cast<double>(config_.parking.max_parking_speed_mps) + 1e-6;
+    const double wheelbase = static_cast<double>(config_.vehicle.wheelbase_m);
+    const double steering_limit_rad =
+        static_cast<double>(config_.vehicle.steering_limit_deg) * kPi / 180.0;
+    if (!std::isfinite(wheelbase) || wheelbase <= 0.01 ||
+        !std::isfinite(steering_limit_rad) || steering_limit_rad < 0.0) {
+        return reject("trajectory_vehicle_geometry_invalid");
+    }
+    const double max_curvature = std::tan(steering_limit_rad) / wheelbase;
+    int direction_switches = 0;
+    double terminal_travel_m = 0.0;
 
     for (std::size_t i = 0; i < trajectory.points.size(); ++i) {
         const ParkingTrajectoryPoint& point = trajectory.points[i];
@@ -106,8 +116,9 @@ ParkingTrajectoryValidationResult ParkingTrajectoryValidator::validate(
             continue;
         }
         const ParkingTrajectoryPoint& previous = trajectory.points[i - 1U];
-        const double spacing = std::hypot(point.x_m - previous.x_m,
-                                          point.y_m - previous.y_m);
+        const double dx = point.x_m - previous.x_m;
+        const double dy = point.y_m - previous.y_m;
+        const double spacing = std::hypot(dx, dy);
         if (!std::isfinite(spacing) ||
             spacing > config_.parking.trajectory_max_point_spacing_m) {
             return reject("trajectory_spacing_too_large");
@@ -118,10 +129,58 @@ ParkingTrajectoryValidationResult ParkingTrajectoryValidator::validate(
             yaw_step > config_.parking.trajectory_max_yaw_step_rad) {
             return reject("trajectory_yaw_step_too_large");
         }
+
+        const double signed_yaw_step =
+            wrapAngle(point.yaw_rad - previous.yaw_rad);
+        const double midpoint_yaw = previous.yaw_rad + 0.5 * signed_yaw_step;
+        const double longitudinal =
+            dx * std::cos(midpoint_yaw) + dy * std::sin(midpoint_yaw);
+        const double lateral =
+            -dx * std::sin(midpoint_yaw) + dy * std::cos(midpoint_yaw);
+        if (spacing > 1e-6) {
+            if (point.direction == MotionDirection::FORWARD &&
+                longitudinal <= 1e-8) {
+                return reject("trajectory_forward_motion_mismatch");
+            }
+            if (point.direction == MotionDirection::REVERSE &&
+                longitudinal >= -1e-8) {
+                return reject("trajectory_reverse_motion_mismatch");
+            }
+            const double max_lateral_error = std::max(0.01, 0.05 * spacing);
+            if (std::abs(lateral) > max_lateral_error) {
+                return reject("trajectory_nonholonomic_slip");
+            }
+            const double curvature = std::abs(signed_yaw_step / longitudinal);
+            if (!std::isfinite(curvature) ||
+                curvature > max_curvature * 1.05 + 1e-6) {
+                return reject("trajectory_curvature_exceeds_vehicle_limit");
+            }
+        }
+
+        if (point.direction != previous.direction) {
+            ++direction_switches;
+            if (direction_switches >
+                config_.parking.trajectory_max_direction_switches) {
+                return reject("trajectory_too_many_direction_switches");
+            }
+            terminal_travel_m = spacing;
+        } else {
+            terminal_travel_m += spacing;
+        }
+    }
+
+    if (config_.parking.trajectory_require_final_reverse &&
+        trajectory.points.back().direction != MotionDirection::REVERSE) {
+        return reject("trajectory_final_direction_not_reverse");
+    }
+    // Chord length is slightly shorter than its integrated arc length.
+    if (terminal_travel_m + 0.005 <
+        config_.parking.trajectory_min_terminal_travel_m) {
+        return reject("trajectory_terminal_reverse_too_short");
     }
 
     result.accepted = true;
-    result.reason = "PASS_PI_CONTRACT_CHECKS_ONLY";
+    result.reason = "PASS_PI_KINEMATIC_CONTRACT_CHECKS";
     return result;
 }
 

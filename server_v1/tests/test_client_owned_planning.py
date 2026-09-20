@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import socket
@@ -19,7 +20,12 @@ if str(SERVER_DIR) not in sys.path:
 
 from local_parking_planner_v1 import plan_local_request
 from map_package_v1 import MAP_PACKAGE_FILES, load_and_verify_manifest
-from server_stub import Handler, ReusableTCPServer, ServerContext
+from server_stub import (
+    Handler,
+    ReusableTCPServer,
+    ServerContext,
+    validate_serialized_trajectory,
+)
 from slot_selector_v1 import desired_body_center_for_slot
 
 
@@ -100,9 +106,71 @@ class MapPackageAndLocalPlannerTests(unittest.TestCase):
         self.assertEqual(result["trajectory"]["trajectory_id"], 7)
         self.assertEqual(result["trajectory"]["target_slot"], "P_B2")
         self.assertEqual(result["trajectory"]["validation"], "PASS")
-        self.assertGreater(len(result["trajectory"]["points"]), 1)
-        final_yaw = result["trajectory"]["points"][-1]["yaw_rad"]
-        self.assertLessEqual(abs(final_yaw), math.radians(12.0))
+        points = result["trajectory"]["points"]
+        self.assertGreater(len(points), 1)
+        final_yaw = points[-1]["yaw_rad"]
+        self.assertLessEqual(abs(final_yaw), math.radians(10.0))
+        self.assertEqual(points[-1]["direction"], "REVERSE")
+
+        direction_switches = sum(
+            points[i]["direction"] != points[i - 1]["direction"]
+            for i in range(1, len(points))
+        )
+        self.assertLessEqual(direction_switches, 2)
+
+        terminal_reverse_m = 0.0
+        for i in range(len(points) - 1, 0, -1):
+            if points[i]["direction"] != "REVERSE":
+                break
+            terminal_reverse_m += math.hypot(
+                points[i]["x_m"] - points[i - 1]["x_m"],
+                points[i]["y_m"] - points[i - 1]["y_m"],
+            )
+            if points[i - 1]["direction"] != "REVERSE":
+                break
+        self.assertGreaterEqual(terminal_reverse_m, 0.195)
+
+        malformed = copy.deepcopy(result["trajectory"])
+        malformed["points"][1]["direction"] = "REVERSE"
+        malformed["points"][1]["v_ref_mps"] = -0.1
+        ok, reason = validate_serialized_trajectory(
+            ServerContext(SERVER_DIR, planning_enabled=True),
+            malformed,
+            {slot["id"]: slot["state"] for slot in slots()},
+        )
+        self.assertFalse(ok)
+        self.assertEqual(reason, "trajectory_motion_direction_mismatch:1")
+
+    def test_alternate_bottom_slot_uses_bounded_reverse_parking_maneuver(self) -> None:
+        manifest = load_and_verify_manifest(SERVER_DIR)
+        alternate_slots = [
+            {"id": "P_B1", "state": "FREE", "confidence": 1.0},
+            {"id": "P_B2", "state": "OCCUPIED", "confidence": 1.0},
+            {"id": "P_T1", "state": "OCCUPIED", "confidence": 1.0},
+            {"id": "P_T2", "state": "OCCUPIED", "confidence": 1.0},
+        ]
+        request = {
+            "source_seq": 11,
+            "decision": {
+                "decision_id": 8,
+                "map_id": "map_v1",
+                "map_package_sha256": manifest["package_sha256"],
+                "maneuver": "PARK_AT_SLOT",
+                "target_slot": "P_B1",
+            },
+            "pose": {"x_m": 1.3, "y_m": 0.751, "yaw_rad": 0.0},
+            "slots": alternate_slots,
+        }
+
+        result = plan_local_request(SERVER_DIR, request)
+        self.assertEqual(result["status"], "READY", result)
+        points = result["trajectory"]["points"]
+        switches = sum(
+            points[i]["direction"] != points[i - 1]["direction"]
+            for i in range(1, len(points))
+        )
+        self.assertLessEqual(switches, 2)
+        self.assertEqual(points[-1]["direction"], "REVERSE")
 
     def test_protocol_output_emits_standard_trajectory_for_cpp_bridge(self) -> None:
         manifest = load_and_verify_manifest(SERVER_DIR)

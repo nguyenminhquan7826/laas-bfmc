@@ -17,16 +17,29 @@ motion:
   - 22.835397
   allow_forward: true
   allow_reverse: true
+  # Parallel parking should not contain repeated 0.1 m forward/reverse
+  # oscillations. Four cusps still permit a constrained multi-point turn.
+  max_direction_switches: 4
 cost:
   reverse_multiplier: 1.35
-  direction_switch_penalty: 0.3
+  # A cusp includes a full stop and steering/direction transition on the real
+  # car, so penalize it strongly enough to reject short lattice oscillations.
+  direction_switch_penalty: 1.2
   steering_penalty: 0.04
   steering_change_penalty: 0.06
   yaw_heuristic_weight: 0.08
 goal:
-  position_tolerance_m: 0.08
-  yaw_tolerance_deg: 12.0
-  required_final_direction: ANY
+  # These tolerances keep the complete body inside the measured slot while
+  # avoiding unnecessary 0.1 m corrective cusps caused by the search lattice.
+  position_tolerance_m: 0.07
+  yaw_tolerance_deg: 10.0
+  required_final_direction: REVERSE
+  # Require a stable reverse insertion tail rather than accepting a final
+  # one-step correction whose endpoint happens to fall inside the tolerance.
+  minimum_terminal_travel_m: 0.20
+  # Slot polygons follow paint centerlines; allow approximately half a paint
+  # stroke plus calibration error when checking the final body corners.
+  terminal_slot_boundary_tolerance_m: 0.01
   desired_vehicle_alignment: BODY_CENTER_AT_SLOT_CENTER_AND_BODY_PARALLEL_TO_SLOT_SIDES
   goal_mode: BODY_CENTER_TARGET_EXACT_REAR_AXLE_FROM_MEASURED_GEOMETRY
 collision:
@@ -40,7 +53,7 @@ collision:
 notes:
 - Standard bicycle model uses tan(delta), not the sin(delta) typo seen in the thesis equation.
 - Steering +/-22.835397 deg is a shared-platform thesis baseline and remains pending direct wheel-angle validation on the current vehicle.
-- Final motion direction may be FORWARD or REVERSE; terminal pose quality is what defines parking success.
+- Every accepted parking path ends with at least 0.20 m of continuous reverse motion and uses no more than four direction changes.
 - UNKNOWN is never treated as a candidate FREE parking slot.
 - CAD-derived DRIVABLE_AREA V1 is mandatory: every integration sample of each motion primitive must keep the full oriented vehicle footprint inside the drivable region.
 - FULL_FOOTPRINT uses the measured 0.350 m x 0.210 m body, 0.250 m wheelbase, and 0.050 m front/rear overhangs from vehicle_v1.yaml.

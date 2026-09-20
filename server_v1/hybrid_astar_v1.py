@@ -28,6 +28,8 @@ class Node:
     parent: Optional["Node"]
     direction: int  # +1 forward, -1 reverse, 0 start
     steer_rad: float
+    direction_switches: int = 0
+    terminal_travel_m: float = 0.0
 
     @property
     def pose(self) -> Pose:
@@ -143,6 +145,9 @@ class HybridAStarPlanner:
             self.directions.append(+1)
         if motion.get("allow_reverse", True):
             self.directions.append(-1)
+        self.max_direction_switches = int(motion.get("max_direction_switches", 4))
+        if self.max_direction_switches < 0:
+            raise ValueError("motion.max_direction_switches must be non-negative")
 
         self.reverse_multiplier = float(cost["reverse_multiplier"])
         self.direction_switch_penalty = float(cost["direction_switch_penalty"])
@@ -152,6 +157,29 @@ class HybridAStarPlanner:
 
         self.goal_pos_tol = float(goal["position_tolerance_m"])
         self.goal_yaw_tol = math.radians(float(goal["yaw_tolerance_deg"]))
+        required_final_direction = str(
+            goal.get("required_final_direction", "ANY")
+        ).upper()
+        required_direction_values = {"ANY": 0, "FORWARD": +1, "REVERSE": -1}
+        if required_final_direction not in required_direction_values:
+            raise ValueError(
+                "goal.required_final_direction must be ANY, FORWARD, or REVERSE"
+            )
+        self.required_final_direction = required_direction_values[
+            required_final_direction
+        ]
+        self.minimum_terminal_travel_m = float(
+            goal.get("minimum_terminal_travel_m", 0.0)
+        )
+        if self.minimum_terminal_travel_m < 0.0:
+            raise ValueError("goal.minimum_terminal_travel_m must be non-negative")
+        self.terminal_slot_boundary_tolerance_m = float(
+            goal.get("terminal_slot_boundary_tolerance_m", 0.0)
+        )
+        if self.terminal_slot_boundary_tolerance_m < 0.0:
+            raise ValueError(
+                "goal.terminal_slot_boundary_tolerance_m must be non-negative"
+            )
 
         self.collision_mode = str(collision.get("mode", self.POINT_COLLISION_MODE)).upper()
         if self.collision_mode not in (self.POINT_COLLISION_MODE, self.FULL_FOOTPRINT_MODE):
@@ -234,23 +262,88 @@ class HybridAStarPlanner:
     def normalize_angle(a: float) -> float:
         return math.atan2(math.sin(a), math.cos(a))
 
-    def state_key(self, x: float, y: float, yaw: float) -> Tuple[int, int, int]:
+    def state_key(
+        self,
+        x: float,
+        y: float,
+        yaw: float,
+        direction: int = 0,
+        steer_rad: float = 0.0,
+        direction_switches: int = 0,
+        terminal_travel_m: float = 0.0,
+    ) -> Tuple[int, int, int, int, int, int, int]:
+        """Discretize the complete cost-dependent search state.
+
+        Direction and previous steering angle are part of the state because
+        transition cost depends on both. The switch count and terminal-motion
+        progress are included because they affect feasibility at the goal.
+        Omitting these values incorrectly merges incompatible arrivals in one
+        pose bin and can create short forward/reverse oscillations.
+        """
         ix = int(round(x / self.grid_res))
         iy = int(round(y / self.grid_res))
         yaw_n = self.normalize_angle(yaw)
         iyaw = int(round((yaw_n + math.pi) / self.yaw_res))
         n_yaw = max(1, int(round(2.0 * math.pi / self.yaw_res)))
-        return ix, iy, iyaw % n_yaw
+        if direction == 0:
+            steer_bin = 0
+        else:
+            steer_bin = min(
+                range(len(self.steering_samples)),
+                key=lambda i: abs(self.steering_samples[i] - steer_rad),
+            ) + 1
+        required_terminal_steps = int(
+            math.ceil(self.minimum_terminal_travel_m / self.motion_step - 1e-9)
+        )
+        terminal_steps = min(
+            required_terminal_steps,
+            max(0, int(round(terminal_travel_m / self.motion_step))),
+        )
+        return (
+            ix,
+            iy,
+            iyaw % n_yaw,
+            int(direction),
+            steer_bin,
+            int(direction_switches),
+            terminal_steps,
+        )
 
     def heuristic(self, pose: Pose, goal: Pose) -> float:
         d = math.hypot(goal.x - pose.x, goal.y - pose.y)
         yaw_err = abs(self.normalize_angle(goal.yaw - pose.yaw))
         return d + self.yaw_heuristic_weight * yaw_err
 
-    def goal_reached(self, node: Node, goal: Pose) -> bool:
+    def goal_reached(
+        self,
+        node: Node,
+        goal: Pose,
+        goal_region: Optional[RectObstacle] = None,
+    ) -> bool:
         pos_err = math.hypot(goal.x - node.x, goal.y - node.y)
         yaw_err = abs(self.normalize_angle(goal.yaw - node.yaw))
-        return pos_err <= self.goal_pos_tol and yaw_err <= self.goal_yaw_tol
+        if pos_err > self.goal_pos_tol or yaw_err > self.goal_yaw_tol:
+            return False
+        if (
+            self.required_final_direction != 0
+            and node.direction != self.required_final_direction
+        ):
+            return False
+        if node.terminal_travel_m + 1e-9 < self.minimum_terminal_travel_m:
+            return False
+        if goal_region is not None and self.collision_mode == self.FULL_FOOTPRINT_MODE:
+            tolerance = self.terminal_slot_boundary_tolerance_m
+            for corner_x, corner_y in self.footprint_corners(node.pose):
+                if not (
+                    goal_region.x_min - tolerance
+                    <= corner_x
+                    <= goal_region.x_max + tolerance
+                    and goal_region.y_min - tolerance
+                    <= corner_y
+                    <= goal_region.y_max + tolerance
+                ):
+                    return False
+        return True
 
     def point_in_drivable_area(self, x: float, y: float) -> bool:
         if x < 0.0 or x > self.map_width or y < 0.0 or y > self.map_height:
@@ -494,9 +587,11 @@ class HybridAStarPlanner:
         while remaining > 1e-9:
             ds = min(self.integration_step, remaining)
             signed_ds = direction * ds
-            x += signed_ds * math.cos(yaw)
-            y += signed_ds * math.sin(yaw)
-            yaw = self.normalize_angle(yaw + signed_ds * curvature)
+            delta_yaw = signed_ds * curvature
+            midpoint_yaw = yaw + 0.5 * delta_yaw
+            x += signed_ds * math.cos(midpoint_yaw)
+            y += signed_ds * math.sin(midpoint_yaw)
+            yaw = self.normalize_angle(yaw + delta_yaw)
             if self.pose_collision(Pose(x, y, yaw), obstacles):
                 return None
             remaining -= ds
@@ -515,7 +610,13 @@ class HybridAStarPlanner:
             )
         return base
 
-    def plan(self, start: Pose, goal: Pose, obstacles: Sequence[RectObstacle]) -> PlanResult:
+    def plan(
+        self,
+        start: Pose,
+        goal: Pose,
+        obstacles: Sequence[RectObstacle],
+        goal_region: Optional[RectObstacle] = None,
+    ) -> PlanResult:
         if self.collision_mode == self.POINT_COLLISION_MODE:
             if not self.point_in_drivable_area(start.x, start.y):
                 return PlanResult(False, [], math.inf, 0, "start_outside_drivable_area")
@@ -547,33 +648,69 @@ class HybridAStarPlanner:
         counter = 0
         open_heap: List[Tuple[float, int, Node]] = []
         heapq.heappush(open_heap, (self.heuristic(start, goal), counter, start_node))
-        best_g: Dict[Tuple[int, int, int], float] = {
-            self.state_key(start.x, start.y, start.yaw): 0.0
+        best_g: Dict[Tuple[int, int, int, int, int, int, int], float] = {
+            self.state_key(start.x, start.y, start.yaw, 0, 0.0, 0, 0.0): 0.0
         }
 
         expansions = 0
         while open_heap and expansions < self.max_expansions:
             _, _, current = heapq.heappop(open_heap)
-            key = self.state_key(current.x, current.y, current.yaw)
+            key = self.state_key(
+                current.x,
+                current.y,
+                current.yaw,
+                current.direction,
+                current.steer_rad,
+                current.direction_switches,
+                current.terminal_travel_m,
+            )
             if current.g > best_g.get(key, math.inf) + 1e-9:
                 continue
 
             expansions += 1
-            if self.goal_reached(current, goal):
+            if self.goal_reached(current, goal, goal_region):
                 path = self.reconstruct(current)
                 return PlanResult(True, path, current.g, expansions, "goal_reached")
 
             for direction in self.directions:
                 for steer in self.steering_samples:
+                    direction_switches = current.direction_switches
+                    if current.direction != 0 and direction != current.direction:
+                        direction_switches += 1
+                    if direction_switches > self.max_direction_switches:
+                        continue
                     nxt = self.simulate_primitive(current, direction, steer, obstacles)
                     if nxt is None:
                         continue
                     g2 = current.g + self.transition_cost(current, direction, steer)
-                    k2 = self.state_key(nxt.x, nxt.y, nxt.yaw)
+                    terminal_travel_m = (
+                        current.terminal_travel_m + self.motion_step
+                        if current.direction in (0, direction)
+                        else self.motion_step
+                    )
+                    k2 = self.state_key(
+                        nxt.x,
+                        nxt.y,
+                        nxt.yaw,
+                        direction,
+                        steer,
+                        direction_switches,
+                        terminal_travel_m,
+                    )
                     if g2 + 1e-9 >= best_g.get(k2, math.inf):
                         continue
                     best_g[k2] = g2
-                    child = Node(nxt.x, nxt.y, nxt.yaw, g2, current, direction, steer)
+                    child = Node(
+                        nxt.x,
+                        nxt.y,
+                        nxt.yaw,
+                        g2,
+                        current,
+                        direction,
+                        steer,
+                        direction_switches,
+                        terminal_travel_m,
+                    )
                     counter += 1
                     f2 = g2 + self.heuristic(nxt, goal)
                     heapq.heappush(open_heap, (f2, counter, child))

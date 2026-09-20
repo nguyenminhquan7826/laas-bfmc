@@ -4,7 +4,13 @@ import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from hybrid_astar_v1 import HybridAStarPlanner, PlanResult, Pose, build_slot_obstacles
+from hybrid_astar_v1 import (
+    HybridAStarPlanner,
+    PlanResult,
+    Pose,
+    build_slot_obstacles,
+    slot_rect,
+)
 
 
 @dataclass
@@ -92,7 +98,12 @@ def choose_best_free_slot(
             continue
         goal, body_target, goal_mode = rear_axle_goal_for_slot(slot, vehicle_cfg)
         obstacles = build_slot_obstacles(map_cfg, slot_states, target_slot=sid)
-        result = planner.plan(start, goal, obstacles)
+        result = planner.plan(
+            start,
+            goal,
+            obstacles,
+            goal_region=slot_rect(slot, sid),
+        )
         candidates.append(SlotPlan(sid, goal, body_target, goal_mode, result))
 
     feasible = [c for c in candidates if c.result.success]

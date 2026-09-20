@@ -39,13 +39,12 @@ def slots() -> list[dict]:
 
 
 class MapPackageAndLocalPlannerTests(unittest.TestCase):
-    def test_all_map_slots_have_parallel_body_goal_yaw(self) -> None:
+    def test_all_map_slots_face_positive_x_independent_of_reverse_motion(self) -> None:
         ctx = ServerContext(SERVER_DIR, planning_enabled=True)
         for slot in ctx.map_cfg["slots"]:
             body = desired_body_center_for_slot(slot)
             self.assertAlmostEqual(math.sin(body.yaw), 0.0, places=7)
-            expected_cos = 1.0 if slot["row"] == "bottom" else -1.0
-            self.assertAlmostEqual(math.cos(body.yaw), expected_cos, places=7)
+            self.assertAlmostEqual(math.cos(body.yaw), 1.0, places=7)
 
     def test_checked_in_map_manifest_matches_operational_files(self) -> None:
         manifest = load_and_verify_manifest(SERVER_DIR)
@@ -170,6 +169,34 @@ class MapPackageAndLocalPlannerTests(unittest.TestCase):
             for i in range(1, len(points))
         )
         self.assertLessEqual(switches, 2)
+        self.assertEqual(points[-1]["direction"], "REVERSE")
+
+    def test_mirrored_top_slot_keeps_body_yaw_zero_and_finishes_reverse(self) -> None:
+        manifest = load_and_verify_manifest(SERVER_DIR)
+        top_slot_status = [
+            {"id": "P_B1", "state": "OCCUPIED", "confidence": 1.0},
+            {"id": "P_B2", "state": "OCCUPIED", "confidence": 1.0},
+            {"id": "P_T1", "state": "FREE", "confidence": 1.0},
+            {"id": "P_T2", "state": "OCCUPIED", "confidence": 1.0},
+        ]
+        request = {
+            "source_seq": 12,
+            "decision": {
+                "decision_id": 10,
+                "map_id": "map_v1",
+                "map_package_sha256": manifest["package_sha256"],
+                "maneuver": "PARK_AT_SLOT",
+                "target_slot": "P_T1",
+            },
+            "pose": {"x_m": 1.3, "y_m": 0.751, "yaw_rad": 0.0},
+            "slots": top_slot_status,
+        }
+
+        result = plan_local_request(SERVER_DIR, request)
+        self.assertEqual(result["status"], "READY", result)
+        points = result["trajectory"]["points"]
+        self.assertGreater(len(points), 1)
+        self.assertLessEqual(abs(points[-1]["yaw_rad"]), math.radians(10.0))
         self.assertEqual(points[-1]["direction"], "REVERSE")
 
     def test_protocol_output_emits_standard_trajectory_for_cpp_bridge(self) -> None:

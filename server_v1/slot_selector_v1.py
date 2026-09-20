@@ -30,10 +30,9 @@ def desired_body_center_for_slot(slot: dict) -> Pose:
       2) vehicle longitudinal axis is parallel to the two side boundaries.
 
     The goal yaw is map data, not an ID naming convention. For map_v1 all four
-    spaces are parallel to the road: bottom row points +X and top row points
-    -X. Keeping this explicit prevents a parallel slot from accidentally being
-    treated as a perpendicular one.
-    The final motion primitive may be FORWARD or REVERSE.
+    spaces are parallel to the road and the vehicle body points +X at the goal.
+    A reverse parking manoeuvre therefore keeps yaw=0 while its final motion
+    primitive is REVERSE; reverse velocity must not be confused with body yaw.
     """
     cx, cy = map(float, slot["center_m"])
     goal_pose = slot.get("goal_pose")
@@ -50,8 +49,9 @@ def desired_body_center_for_slot(slot: dict) -> Pose:
     if not math.isfinite(yaw):
         raise ValueError(f"slot_goal_yaw_invalid:{slot.get('id')}")
 
-    # map_v1 parallel slots have their long polygon axis along X. Accept either
-    # travel direction (0 or pi), reject a perpendicular +/-pi/2 goal.
+    # map_v1 parallel slots have their long polygon axis along X. Reject a
+    # perpendicular +/-pi/2 goal. The explicit map yaw selects the vehicle's
+    # body orientation independently from FORWARD/REVERSE motion direction.
     if abs(math.sin(yaw)) > 1e-6:
         raise ValueError(f"slot_goal_not_parallel_to_road:{slot.get('id')}")
     return Pose(cx, cy, yaw)

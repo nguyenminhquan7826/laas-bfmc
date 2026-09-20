@@ -31,7 +31,7 @@ struct UdpConfig {
     bool enable_debug_stream = true;
 
     // Change this to the current IPv4 address of the monitoring laptop.
-    std::string monitor_ip = "192.168.1.105";
+    std::string monitor_ip = "192.168.1.107";
 
     // C++ camera -> local Python ONNX process.
     int yolo_send_port = 9996;
@@ -92,7 +92,7 @@ struct ParkingConfig {
     std::string map_id = "map_v1";
     std::string map_package_sha256 =
         "807fd4c49c396a7ee3c43c5afb3f44b75248fdd07fb867376562999de6acaa22";
-    std::string server_host = "192.168.1.105";
+    std::string server_host = "192.168.1.107";
     int server_port = 5000;
     int reconnect_period_ms = 1000;
     int max_ndjson_line_bytes = 65536;
